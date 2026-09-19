@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Dev release
+
+# Assembled from the ParkviewLab handbook's dev-release parts, one for each of
+# this repository's publish targets that has a dev counterpart: the gate, then
+# the dev job of each of those targets. The recipe is in the handbook's ci.md.
+#
+# A dev build is for local testing: a candidate CI builds before the release, not
+# a version for others to use. Manually triggered (workflow_dispatch; run it with
+# `gh workflow run dev-release.yml --ref develop -f kind=<patch|minor|major>`). It
+# creates NO `v*` tag, so the release gate is untouched, and runs no changelog job.
+# See the handbook's releases.md ("What a release publishes", "Development
+# versioning").
+#
+# hazel-tracking's slot: the dev version follows decision 5 (b) of the real-merges
+# build, which the dev parts of handbook v0.25.0 do not carry yet. Three changes
+# carry it: the `kind` input below, the version computed in the gate from the
+# newest v* tag, and the version set in the docker job's workspace, with nothing
+# committed. docs/decisions.md records each difference from the parts and its
+# reason; the file is re-assembled once a handbook release carries decision 5 in
+# the dev parts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "The release the dev build leads to: patch, minor or major"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0          # every tag: the target is computed from the newest v* tag
+      - name: Verify dev build from develop
+        id: v
+        env:
+          KIND: ${{ inputs.kind }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/develop" ]; then
+            echo "dev-release runs from develop only (got $GITHUB_REF)"; exit 1
+          fi
+          # The repository's one version file, read as the release gate reads it.
+          if [ -f pyproject.toml ]; then
+            FILE=pyproject.toml
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          elif [ -f package.json ]; then
+            FILE=package.json
+            VERSION=$(jq -r .version package.json)
+          elif [ -f VERSION.txt ]; then
+            FILE=VERSION.txt
+            VERSION=$(tr -d '[:space:]' < VERSION.txt)
+          else
+            echo "no version file: expected pyproject.toml, package.json or VERSION.txt"; exit 1
+          fi
+          # The dev version is computed here and committed nowhere (the real-merges
+          # build's decision 5 (b); docs/decisions.md). The target is the newest v*
+          # tag in version order, raised by KIND as dev-tools' _sot.sh
+          # sot_compute_next raises a plain version; with no v* tag yet, it is the
+          # version $FILE declares without its dev marker (R12). N is the run number.
+          case "$KIND" in
+            patch|minor|major) ;;
+            *) echo "::error::kind '$KIND' is not patch, minor or major"; exit 1 ;;
+          esac
+          LAST=$(git tag --list 'v*' | sort -V | tail -n 1)
+          if [ -z "$LAST" ]; then
+            TARGET="${VERSION%%.dev*}"; TARGET="${TARGET%%-dev*}"
+            echo "no v* tag: the target is the version $FILE declares, $TARGET"
+          else
+            IFS=. read -r X Y Z <<< "${LAST#v}"
+            case "$KIND" in
+              major) TARGET="$((X + 1)).0.0" ;;
+              minor) TARGET="$X.$((Y + 1)).0" ;;
+              patch) TARGET="$X.$Y.$((Z + 1))" ;;
+            esac
+            echo "newest tag $LAST, kind $KIND: the target is $TARGET"
+          fi
+          VERSION="$TARGET.dev$GITHUB_RUN_NUMBER"
+          echo "dev version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  docker:
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write       # GHCR push
+    steps:
+      - uses: actions/checkout@v6
+
+      # The dev version in this workspace alone, so that the image reports it; nothing
+      # is committed. `uv version` rewrites pyproject.toml and uv.lock together, which
+      # the image's `uv sync --locked` requires.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Set the dev version in the workspace
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: uv version "$VERSION" --no-sync
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (dev tags — NOT latest)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=dev
+            type=raw,value=${{ needs.gate.outputs.version }}
+            type=sha,prefix=sha-
+
+      - name: Build and push (linux/amd64 + linux/arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

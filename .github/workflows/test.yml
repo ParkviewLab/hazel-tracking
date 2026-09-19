@@ -1,0 +1,90 @@
+# SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Test
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Sync deps
+        run: uv sync
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Format check
+        run: uv run ruff format --check src tests
+
+      - name: Type check
+        run: uv run ty check          # ty must be a dev dependency
+
+      - name: Tests (excluding network marker)
+        run: uv run pytest -m "not network" -q
+
+  # The image built from this tree and run as the stack runs it, with a dummy token
+  # and GitHub's API pointed at a closed local port, so that it reaches nothing: it
+  # must become healthy, report pyproject.toml's version on /health, and answer /
+  # with the display name.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build the image
+        run: docker build -t hazel-tracking:ci .
+
+      - name: Start the container
+        run: >-
+          docker run -d --name hazel-tracking -p 35850:35850
+          -e GITHUB_TOKEN_HAZEL_TRACKING=dummy-token
+          -e HAZEL_TRACKING_GITHUB_API_URL=http://127.0.0.1:9
+          hazel-tracking:ci
+
+      - name: Wait until Docker reports it healthy
+        run: |
+          for _ in $(seq 60); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' hazel-tracking)
+            if [ "$status" = healthy ]; then echo "healthy"; exit 0; fi
+            if [ "$status" = unhealthy ]; then break; fi
+            sleep 2
+          done
+          echo "::error::the container did not become healthy (last status: $status)"
+          exit 1
+
+      - name: /health reports pyproject.toml's version
+        run: |
+          expected=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          reported=$(curl -fsS http://127.0.0.1:35850/health | python3 -c "import json, sys; print(json.load(sys.stdin)['version'])")
+          echo "pyproject.toml: $expected; /health: $reported"
+          [ "$reported" = "$expected" ]
+
+      - name: / answers 200 with the display name
+        run: |
+          code=$(curl -sS -o page.html -w '%{http_code}' http://127.0.0.1:35850/)
+          echo "/ answered $code"
+          [ "$code" = 200 ]
+          grep -qF 'ParkviewLab Engineering Dashboard' page.html
+
+      - name: Container logs
+        if: failure()
+        run: docker logs hazel-tracking
+
+      - name: Remove the container
+        if: always()
+        run: docker rm -f hazel-tracking
