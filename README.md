@@ -21,7 +21,7 @@ hazel-tracking runs in Docker, with `docker compose` or as a Portainer stack; th
 ```bash
 cp .env.example .env          # set GITHUB_TOKEN_HAZEL_TRACKING, and TZ to the lab's zone
 docker compose up -d
-docker compose ps             # "health: starting" for a few seconds, then "healthy"
+docker compose ps             # "health: starting" for about six seconds, then "healthy"
 curl http://127.0.0.1:35850/health
 ```
 
@@ -29,7 +29,7 @@ Then open `http://<host>:35850/`. For Portainer, paste [`docker-compose.yml`](do
 
 The token is a classic GitHub token with `read:packages` alone, the only kind GitHub's Packages API accepts: it reads the organisation's public repositories and its container packages, and it can write nothing. The service stores nothing, so the stack has no volume.
 
-What the deployment assumes, stated plainly: the home network, plain HTTP and no login. Any device on the network can open the page, and it is not for the public internet. The page never shows the token or any other secret.
+The deployment assumes the home network, plain HTTP and no login: any device on the network can open the page, and it is not for the public internet. The page never shows the token or any other secret.
 
 ## Endpoints
 
@@ -62,7 +62,7 @@ git release                                       # annotated tag vX.Y.Z from py
 git push --follow-tags                            # the tag push fires the workflow
 ```
 
-`git bump release` ships the version `develop` declares, without its dev marker: 0.1.0 from 0.1.0.dev0. Once the workflow is green, the back-merge cascade brings `main`'s release and changelog commits down: `main` into `develop` with `--no-ff`, then `develop` into each open working branch, and `develop` opens the next development cycle (`X.Y.(Z+1).dev0` in `pyproject.toml`).
+`git bump release` sets the version to the one `develop` declares, without its dev marker: 0.1.0 from 0.1.0.dev0. Once the workflow is green, the back-merge cascade brings `main`'s release and changelog commits down: `main` into `develop` with `--no-ff`, then `develop` into each open working branch, and `develop` opens the next development cycle (`X.Y.(Z+1).dev0` in `pyproject.toml`).
 
 The workflow runs a gate (the tag equals the version, which carries no dev marker; the tagged commit is reachable from `main`; the version is greater than the previous tag), then a `docker` job that builds and pushes the image for amd64 and arm64 with the `X.Y.Z`, `X.Y` and `latest` tags, then a `changelog` job that writes the new section of `CHANGELOG.md` (an LLM-written Highlights paragraph and [`git-cliff`](https://git-cliff.org/)'s categorized list), commits it to `main`, and creates the GitHub Release. There is no PyPI publish.
 

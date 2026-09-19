@@ -50,7 +50,7 @@ CI also builds and runs the image (`test.yml`, job `image`). To run the same che
 ```bash
 docker build -t hazel-tracking:ci .
 docker run -d --name hazel-tracking -p 35850:35850 -e GITHUB_TOKEN_HAZEL_TRACKING=dummy-token -e HAZEL_TRACKING_GITHUB_API_URL=http://127.0.0.1:9 hazel-tracking:ci
-docker inspect --format '{{.State.Health.Status}}' hazel-tracking   # "healthy" after about 15 s
+docker inspect --format '{{.State.Health.Status}}' hazel-tracking   # "healthy" after about six seconds
 curl http://127.0.0.1:35850/health                                  # the version pyproject.toml declares
 curl -s http://127.0.0.1:35850/ | grep -c 'ParkviewLab Engineering Dashboard'
 docker rm -f hazel-tracking
