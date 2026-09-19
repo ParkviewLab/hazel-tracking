@@ -37,7 +37,7 @@ Port 35850: the page at `/`; `GET /health`, which returns `{ok, version, uptime_
 
 ## Configuration
 
-Every variable is read from the environment at startup, and the compose file passes each one through.
+Every variable is read from the environment at startup. The image sets `HOST` and `PORT`, and the compose file sets the token, the wait and the time zone.
 
 | Variable | Default | Purpose |
 |---|---|---|
