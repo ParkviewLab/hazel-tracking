@@ -90,3 +90,25 @@ async def test_the_three_tabs_are_there_and_switching_gathers_nothing(user: User
     await asyncio.sleep(0.1)
     assert page_plan.full_gathers == 1
     assert page_plan.pull_request_gathers == 1
+
+
+async def test_refresh_covers_the_page_with_the_busy_spinner(user: User, page_plan: Plan) -> None:
+    await open_page(user, page_plan)
+    await user.should_not_see(marker="spinner")
+    hold = page_plan.block()
+    user.find(marker="refresh").click()
+    await until(lambda: page_plan.full_gathers == 2)
+    await user.should_see(marker="spinner")
+    hold.set()
+    await user.should_not_see(marker="spinner")
+
+
+async def test_refresh_is_disabled_while_a_gather_runs(user: User, page_plan: Plan) -> None:
+    await open_page(user, page_plan)
+    hold = page_plan.block()
+    user.find(marker="refresh").click()
+    await until(lambda: page_plan.full_gathers == 2)
+    (button,) = user.find(marker="refresh").elements
+    assert not button.enabled
+    hold.set()
+    await until(lambda: button.enabled)

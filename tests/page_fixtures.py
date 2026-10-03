@@ -67,6 +67,7 @@ class Plan:
     full_raises: Exception | None = None
     pull_requests_raise: Exception | None = None
     hold: asyncio.Event | None = None
+    hold_pull_requests: asyncio.Event | None = None
 
     def reset(self) -> None:
         self.snapshots = []
@@ -76,12 +77,18 @@ class Plan:
         self.full_raises = None
         self.pull_requests_raise = None
         self.hold = None
+        self.hold_pull_requests = None
 
     def block(self) -> asyncio.Event:
         """Hold the full gather until the event is set, so that a test can see the page before
         anything has been gathered."""
         self.hold = asyncio.Event()
         return self.hold
+
+    def block_pull_requests(self) -> asyncio.Event:
+        """Hold the gather of the open pull requests until the event is set."""
+        self.hold_pull_requests = asyncio.Event()
+        return self.hold_pull_requests
 
     def load(
         self,
@@ -108,6 +115,8 @@ class Plan:
 
     async def gather_pull_requests(self) -> PullRequestsSnapshot:
         self.pull_request_gathers += 1
+        if self.hold_pull_requests is not None:
+            await self.hold_pull_requests.wait()
         if self.pull_requests_raise is not None:
             raise self.pull_requests_raise
         assert self.pull_requests, "the plan holds no snapshot for the open pull requests"
