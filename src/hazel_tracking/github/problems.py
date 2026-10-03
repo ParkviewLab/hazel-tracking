@@ -99,6 +99,16 @@ def truncated(what: str, call: str, listed: int, total: int, limit: int) -> Prob
     )
 
 
+def uncomputed(what: str, call: str) -> Problem:
+    """The problem a status GitHub had still not computed at the second read makes (R4): it is shown
+    as not gathered, and a gather that holds one is not wholly successful, so the page tries again."""
+    return Problem(
+        what=what,
+        why="GitHub had not computed it, asked a second time",
+        details=(ProblemDetail(call=call, status=200, message=None),),
+    )
+
+
 def timed_out(wait_seconds: float, outstanding: Iterable[str]) -> Problem:
     """The problem a gather not complete within the wait makes, its detail naming each call still
     outstanding (R11)."""
@@ -131,6 +141,8 @@ def why(failure: Failure, zone: ZoneInfo | None = None) -> str:
         return "GitHub gave no answer"
     if failure.kind is FailureKind.UNREADABLE:
         return "GitHub's answer could not be read"
+    if failure.kind is FailureKind.TOO_LONG:
+        return "GitHub's list is longer than one gather reads"
     return "GitHub answered with an error"
 
 

@@ -137,7 +137,7 @@ class RepositoryState:
             trunks=self.trunks,
             last_push=self.last_push,
             open_issues=self.open_issues,
-            newest_tag=NOT_GATHERED if self.tags is None else Gathered(facts.highest_version(self.tags)),
+            newest_tag=NOT_GATHERED if self.tags is None else Gathered(facts.highest_tag(self.tags)),
             newest_release=self.newest_release,
             dev_release=dev_release,
             unreleased=Unreleased(unreleased_count, self._documentation()) if has_release_trunk else None,
@@ -209,7 +209,9 @@ class FullState:
             return NOT_GATHERED
         if state.tags is None or not isinstance(state.newest_release, Gathered):
             return NOT_GATHERED
-        newest_tag = facts.highest_version(state.tags)
+        # The newest tag is R3's `vX.Y.Z`; the newest Release is whatever GitHub's latest Release is
+        # tagged, so the higher of the two is taken by any version either name reads as.
+        newest_tag = facts.highest_tag(state.tags)
         named = [name for name in (newest_tag, state.newest_release.value) if name]
         final = facts.highest_version(named) or (named[0] if named else None)
         return Gathered(facts.dev_release(self.dev_versions.get(state.name, []), final))

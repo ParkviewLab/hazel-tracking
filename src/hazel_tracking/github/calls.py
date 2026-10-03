@@ -76,6 +76,7 @@ class FailureKind(StrEnum):
     NOT_FOUND = "nothing to read"
     FAILED = "GitHub failed"
     SCOPE_REFUSED = "the token lacks a scope"
+    TOO_LONG = "longer than one gather reads"
     UNREADABLE = "the answer could not be read"
     ERROR = "GitHub answered with an error"
 
@@ -91,6 +92,10 @@ class Failure:
     status: int | None = None
     message: str | None = None
     resets_at: datetime | None = None
+    paths: tuple[tuple[Any, ...], ...] = ()
+    """Where in the answer the errors fell, as GraphQL's `path` names it: the first element is the
+    alias of the target the call asked for, so a call for many targets can lose one and keep the
+    rest. An answer whose errors name no path at all is a loss of every target of that call."""
 
 
 @dataclass(frozen=True)
@@ -105,14 +110,18 @@ class Reply:
 
 
 def redact(text: str | None, token: str | None) -> str | None:
-    """`text` on one line, shortened to `MESSAGE_LIMIT`, with the token named in general terms
-    wherever it appears, and `None` where nothing is left."""
+    """`text` on one line, with the token named in general terms wherever it appears, shortened to
+    `MESSAGE_LIMIT`, and `None` where nothing is left.
+
+    The order matters: shortening first would cut a token that straddles the limit in two and leave
+    the first half standing.
+    """
     if text is None:
         return None
-    shortened = " ".join(text.split())[:MESSAGE_LIMIT]
+    named = " ".join(text.split())
     if token:
-        shortened = shortened.replace(token, "the GitHub token")
-    return shortened or None
+        named = named.replace(token, "the GitHub token")
+    return named[:MESSAGE_LIMIT] or None
 
 
 def aware(moment: str | None) -> datetime | None:
@@ -191,11 +200,17 @@ class Reader:
         return tuple(sorted(call for call, count in self._in_flight.items() if count > 0))
 
     async def graphql(self, call: str, operation: str, document: str, variables: Mapping[str, Any]) -> Reply:
-        """One GraphQL call, named for the dialog by `call` and for GitHub by `operation`."""
+        """One GraphQL call, named for the dialog by `call` and for GitHub by `operation`.
+
+        An answer refused at the HTTP level is read as such before its body is parsed, since a 502
+        from a proxy carries no JSON at all; a GraphQL answer's own errors come with status 200.
+        """
         body = {"query": document, "variables": dict(variables), "operationName": operation}
         sent = await self._send(call, "POST", GRAPHQL_PATH, json=body, headers=_GRAPHQL_HEADERS)
         if isinstance(sent, Failure):
             return Reply(call=call, failure=sent)
+        if sent.status_code >= 400:
+            return Reply(call=call, failure=self._http_failure(call, sent))
         payload = self._read(call, sent)
         if isinstance(payload, Failure):
             return Reply(call=call, failure=payload)
@@ -203,19 +218,23 @@ class Reader:
             return Reply(call=call, failure=self._unreadable(call, sent.status_code))
         self._read_rate_limit(call, sent, payload)
         data = payload.get("data")
-        errors = payload.get("errors")
-        if sent.status_code >= 400 or errors:
-            return Reply(call=call, data=data, failure=self._graphql_failure(call, sent, errors))
+        if payload.get("errors"):
+            return Reply(call=call, data=data, failure=self._graphql_failure(call, sent, payload["errors"]))
         return Reply(call=call, data=data)
 
     async def rest(self, call: str, path: str, params: Mapping[str, Any] | None = None) -> Reply:
-        """One REST call, no more than `REST_AT_ONCE` of them in flight at a time."""
-        async with self._rest_at_once:
-            sent = await self._send(call, "GET", path, params=params, headers=_REST_HEADERS)
+        """One REST call, no more than `REST_AT_ONCE` of them in flight at a time.
+
+        A call waiting for its turn is outstanding from the moment it is made, not from the moment
+        it is sent, so that the wait running out names it (R11).
+        """
+        sent = await self._send(
+            call, "GET", path, params=params, headers=_REST_HEADERS, at_once=self._rest_at_once
+        )
         if isinstance(sent, Failure):
             return Reply(call=call, failure=sent)
         if sent.status_code >= 400:
-            return Reply(call=call, failure=self._rest_failure(call, sent))
+            return Reply(call=call, failure=self._http_failure(call, sent))
         payload = self._read(call, sent)
         if isinstance(payload, Failure):
             return Reply(call=call, failure=payload)
@@ -236,8 +255,17 @@ class Reader:
             items.extend(reply.data)
             if len(reply.data) < REST_PAGE:
                 return items, None
-        logger.warning("the list for %s is longer than %s pages and was read that far", call, PAGE_LIMIT)
-        return items, None
+        logger.warning("the list for %s runs past %s pages and was not read whole", call, PAGE_LIMIT)
+        return items, self.too_long(call)
+
+    def too_long(self, call: str) -> Failure:
+        """The failure a list longer than `PAGE_LIMIT` pages makes: it was not read whole, so the
+        fact it feeds is not gathered rather than counted short (R7)."""
+        return Failure(
+            call=call,
+            kind=FailureKind.TOO_LONG,
+            message=f"the list runs past the {PAGE_LIMIT} pages one gather reads",
+        )
 
     async def _send(
         self,
@@ -248,12 +276,20 @@ class Reader:
         params: Mapping[str, Any] | None = None,
         json: Any = None,
         headers: Mapping[str, str] | None = None,
+        at_once: asyncio.Semaphore | None = None,
     ) -> httpx.Response | Failure:
         """The one place a request is made. A call cut short by the wait is cancelled here, and
-        is struck off neither list, so that `outstanding` still names it."""
+        is struck off neither list, so that `outstanding` still names it; `at_once` bounds how many
+        calls of its kind are in flight, and waiting for it counts as outstanding too."""
         self._in_flight[call] = self._in_flight.get(call, 0) + 1
         try:
-            answer = await self.client.request(method, path, params=params, json=json, headers=headers)
+            if at_once is not None:
+                async with at_once:
+                    answer = await self.client.request(
+                        method, path, params=params, json=json, headers=headers
+                    )
+            else:
+                answer = await self.client.request(method, path, params=params, json=json, headers=headers)
         except httpx.HTTPError as refusal:
             self._answered(call)
             # The exception's own message can name the address it was sent to; its kind cannot.
@@ -283,35 +319,35 @@ class Reader:
         )
 
     def _graphql_failure(self, call: str, answer: httpx.Response, errors: Any) -> Failure:
+        """The failure a GraphQL answer's own errors make, which come with status 200: the kind the
+        errors name, the first message, and every path they fell at."""
         listed = [error for error in errors if isinstance(error, Mapping)] if isinstance(errors, list) else []
-        if any(error.get("type") == "INSUFFICIENT_SCOPES" for error in listed):
+        message = next((error.get("message") for error in listed if error.get("message")), None)
+        paths = tuple(
+            tuple(error["path"]) for error in listed if isinstance(error.get("path"), list) and error["path"]
+        )
+        types = {error.get("type") for error in listed}
+        if "INSUFFICIENT_SCOPES" in types:
             # GraphQL refuses a field the credential's scopes do not reach with status 200 and an
             # error of this type, as it does `Ref.compare`'s counts to a token without `repo`.
-            message = next((error.get("message") for error in listed if error.get("message")), None)
-            return Failure(
-                call=call,
-                kind=FailureKind.SCOPE_REFUSED,
-                status=answer.status_code,
-                message=self._message(message),
-            )
-        if any(error.get("type") == "RATE_LIMITED" for error in listed):
-            return Failure(
-                call=call,
-                kind=FailureKind.RATE_LIMITED,
-                status=answer.status_code,
-                resets_at=self._resets_at(answer),
-            )
-        message = next((error.get("message") for error in listed if error.get("message")), None)
-        kind = self._kind(answer, FailureKind.ERROR)
+            kind = FailureKind.SCOPE_REFUSED
+        elif "RATE_LIMITED" in types:
+            kind = FailureKind.RATE_LIMITED
+        else:
+            kind = FailureKind.ERROR
         return Failure(
             call=call,
             kind=kind,
             status=answer.status_code,
             message=None if kind is FailureKind.RATE_LIMITED else self._message(message),
             resets_at=self._resets_at(answer) if kind is FailureKind.RATE_LIMITED else None,
+            paths=paths,
         )
 
-    def _rest_failure(self, call: str, answer: httpx.Response) -> Failure:
+    def _http_failure(self, call: str, answer: httpx.Response) -> Failure:
+        """The failure an answer refused at the HTTP level makes, whatever its body: the status says
+        the kind, and the body's own `message`, where it has one, tells a refusal for the rate limit
+        from a refusal of the credential."""
         body: Any
         try:
             body = answer.json()

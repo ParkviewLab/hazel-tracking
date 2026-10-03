@@ -14,7 +14,8 @@ from datetime import UTC, datetime
 import pytest
 
 from hazel_tracking.github import facts
-from hazel_tracking.github.calls import aware, expiry, redact
+from hazel_tracking.github.calls import MESSAGE_LIMIT, Failure, FailureKind, aware, expiry, redact
+from hazel_tracking.github.collecting import reaches
 from hazel_tracking.model import CheckState, DevRelease, PullRequestStatus, ReleaseCondition, Trunks
 
 
@@ -297,3 +298,86 @@ def test_a_message_is_carried_on_one_line_and_no_further_than_its_limit(sentinel
     long = redact("x" * 500, sentinel_token)
     assert long is not None and len(long) == 300
     assert redact(None, sentinel_token) is None
+
+
+# The newest tag, which R3 reads as `vX.Y.Z` and nothing else.
+
+
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        (("v0.1.0", "v0.10.0", "v0.9.0"), "v0.10.0"),
+        (("v1.2.3", "v1.2.4rc1", "v2.0.0b1"), "v1.2.3"),
+        (("0.1.0", "1.0"), None),
+        (("v1.2", "v1.2.3.4", "v1.2.3-dev"), None),
+        (("v1.2.3", "0.9.0"), "v1.2.3"),
+        ((), None),
+    ],
+)
+def test_the_newest_tag_is_the_highest_v_major_minor_patch(
+    names: tuple[str, ...], expected: str | None
+) -> None:
+    assert facts.highest_tag(names) == expected
+
+
+def test_a_dev_version_is_not_held_to_the_tags_form() -> None:
+    """A dev version is published as `0.2.1.dev4`, with no `v`, so the dev release reads any version
+    PEP 440 reads whilst the newest tag reads `vX.Y.Z` alone."""
+    assert facts.highest_version(("0.2.1.dev4", "0.3.0.dev1")) == "0.3.0.dev1"
+    assert facts.highest_tag(("0.2.1.dev4",)) is None
+
+
+# R4: a status GitHub has not computed is no status, whatever else the pull request shows.
+
+
+def test_an_uncomputed_merge_leaves_no_status_even_where_the_checks_have_a_verdict() -> None:
+    """Whether a pull request conflicts comes before whether its checks pass, so a status read
+    whilst GitHub has yet to compute the merge is read once more rather than called by its checks."""
+    assert facts.pull_request_status(pull(mergeable="UNKNOWN", rollup="FAILURE")) is None
+    assert facts.pull_request_status(pull(mergeable="UNKNOWN", rollup="PENDING")) is None
+    assert facts.pull_request_status(pull(mergeStateStatus="UNKNOWN", rollup="FAILURE")) is None
+    assert facts.pull_request_status(pull(mergeable=None, rollup="FAILURE")) is None
+
+
+def test_a_conflict_and_a_draft_stand_before_the_merge_is_computed() -> None:
+    assert facts.pull_request_status(pull(mergeable="CONFLICTING", mergeStateStatus="UNKNOWN")) is (
+        PullRequestStatus.CONFLICTS
+    )
+    assert facts.pull_request_status(pull(isDraft=True, mergeable="UNKNOWN")) is PullRequestStatus.DRAFT
+
+
+# The redaction of a message, at the limit it is shortened to.
+
+
+def test_a_token_at_the_limit_of_a_message_is_named_and_not_cut_in_two(sentinel_token: str) -> None:
+    """Shortening before replacing would leave the first half of a token standing."""
+    for before in range(MESSAGE_LIMIT - len(sentinel_token) - 5, MESSAGE_LIMIT + 5):
+        redacted = redact("x" * before + sentinel_token + " and more", sentinel_token)
+        assert redacted is not None
+        assert sentinel_token not in redacted
+        assert sentinel_token[:8] not in redacted
+        assert len(redacted) <= MESSAGE_LIMIT
+
+
+# Which of a call's targets an answer's errors reach (R7).
+
+
+def test_an_error_reaches_the_target_its_path_names() -> None:
+    """An error reaches a target where it fell at it, above it, or within it, and no other."""
+    at_the_repository = Failure(call="a call", kind=FailureKind.ERROR, paths=(("r1",),))
+    assert reaches(at_the_repository, "r1")
+    assert reaches(at_the_repository, "r1", "c0")
+    assert not reaches(at_the_repository, "r0")
+    assert not reaches(at_the_repository, "r0", "c0")
+    within_one_commit = Failure(
+        call="a call", kind=FailureKind.ERROR, paths=(("r1", "c0", "associatedPullRequests"),)
+    )
+    assert reaches(within_one_commit, "r1", "c0")
+    assert reaches(within_one_commit, "r1")
+    assert not reaches(within_one_commit, "r1", "c2")
+    assert not reaches(None, "r0")
+
+
+def test_an_error_that_names_no_path_reaches_every_target() -> None:
+    assert reaches(Failure(call="a call", kind=FailureKind.ERROR), "r0")
+    assert reaches(Failure(call="a call", kind=FailureKind.SCOPE_REFUSED), "f3", "c9")

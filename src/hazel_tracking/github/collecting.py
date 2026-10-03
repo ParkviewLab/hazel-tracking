@@ -20,7 +20,7 @@ from typing import Any
 
 from hazel_tracking.config import Config
 from hazel_tracking.github import problems
-from hazel_tracking.github.calls import Reply
+from hazel_tracking.github.calls import Failure, Reply
 from hazel_tracking.model import Problem
 
 logger = logging.getLogger(__name__)
@@ -68,3 +68,22 @@ def report(into: list[Problem], cfg: Config, what: str, reply: Reply) -> None:
 def groups[T](targets: Sequence[T], size: int) -> list[Sequence[T]]:
     """`targets` in groups of at most `size`, each group one call."""
     return [targets[start : start + size] for start in range(0, len(targets), size)]
+
+
+def reaches(failure: Failure | None, *aliases: str) -> bool:
+    """Whether a failure reaches the target these aliases name.
+
+    A GraphQL answer may carry data for some of a call's targets and an error for others, each error
+    naming where it fell; a target is lost where an error fell at it, above it or within it. An
+    answer whose errors name no path at all is read as a loss of every target of that call, since
+    there is nothing to tell which of them it concerns.
+    """
+    if failure is None:
+        return False
+    if not failure.paths:
+        return True
+    for path in failure.paths:
+        shared = min(len(path), len(aliases))
+        if tuple(path[:shared]) == aliases[:shared]:
+            return True
+    return False

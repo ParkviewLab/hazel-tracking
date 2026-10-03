@@ -15,6 +15,7 @@ docs/what-it-shows.md and tested without a call.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
@@ -40,6 +41,10 @@ BACK_MERGE_PREFIX = "back-merge-"
 
 # The documentation the mark stands for: the files a documentation site is built from (R5).
 DOCUMENTATION_DIRECTORIES = ("docs/", "site/")
+
+# A version tag, as every tag in the organisation is written and as R3 reads the newest: `vX.Y.Z`
+# and nothing else, so that a tag such as `v1.2.3rc1` or `0.1.0` is not the newest final version.
+VERSION_TAG = re.compile(r"^v\d+\.\d+\.\d+$")
 
 # GitHub's rollup states, in the words of the page. EXPECTED is a check GitHub has been told to
 # expect and has not received, which reads as running like a pending one.
@@ -108,10 +113,18 @@ def version(name: str) -> Version | None:
 
 
 def highest_version(names: Iterable[str]) -> str | None:
-    """The highest by version of these names, as the name itself, by version and not by date
-    (R3); `None` where none of them is a version."""
+    """The highest by version of these names, as the name itself, by version and not by date;
+    `None` where none of them is a version. Any version PEP 440 reads counts, which is what a dev
+    version (`0.2.1.dev4`) needs; for a tag, `highest_tag` is the stricter reading R3 rules."""
     ranked = [(parsed, name) for name in names if (parsed := version(name)) is not None]
     return max(ranked)[1] if ranked else None
+
+
+def highest_tag(names: Iterable[str]) -> str | None:
+    """The newest version tag: the highest `vX.Y.Z` by version and not by date, as the tag itself
+    (R3). A tag of any other form is not a final version and is passed over, a pre-release
+    (`v1.2.3rc1`) and an unprefixed version (`0.1.0`) alike."""
+    return highest_version(name for name in names if VERSION_TAG.match(name))
 
 
 def dev_release(dev_versions: Iterable[str], final: str | None) -> DevRelease | None:
@@ -146,6 +159,11 @@ def pull_request_status(pull: Any) -> PullRequestStatus | None:
     mergeable, state = dig(pull, "mergeable"), dig(pull, "mergeStateStatus")
     if mergeable == "CONFLICTING" or state == "DIRTY":
         return PullRequestStatus.CONFLICTS
+    if mergeable in (None, "UNKNOWN") or state in (None, "UNKNOWN"):
+        # Whether it conflicts comes before whether its checks pass, so a status read whilst GitHub
+        # has yet to compute the merge is no status at all, however the checks stand: it is read
+        # once more. Only draft, which nothing else can displace, is settled before this.
+        return None
     checks = head_checks(pull)
     if checks is CheckState.FAILING:
         return PullRequestStatus.CHECKS_FAILING
@@ -153,8 +171,6 @@ def pull_request_status(pull: Any) -> PullRequestStatus | None:
         return PullRequestStatus.CHECKS_RUNNING
     if state == "BEHIND":
         return PullRequestStatus.BEHIND
-    if mergeable == "UNKNOWN" or state == "UNKNOWN" or state is None or mergeable is None:
-        return None
     return PullRequestStatus.READY
 
 

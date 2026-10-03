@@ -455,3 +455,29 @@ async def test_a_comparison_refused_for_want_of_a_scope_says_so(
     assert problem.why == "GitHub refused the call; the GitHub token lacks the scope it would need"
     assert problem.details[0].message == message
     assert problem.details[0].status == 200
+
+
+async def test_an_answer_refused_at_the_http_level_is_read_by_its_status_not_its_body(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    """A 502 from a proxy carries no JSON at all; it is GitHub failing, not an answer that could not
+    be read."""
+    gh_github.failures[queries.REPOSITORIES_OPERATION] = FakeAnswer(status=502, text="<html>Bad gateway")
+    snapshot = await gather(gh_config, gh_client)
+    assert snapshot.completed
+    problem = gh_problem(snapshot.problems, "every repository's facts")
+    assert problem.why == "GitHub failed on the call"
+    assert problem.details[0].status == 502
+
+
+async def test_a_graphql_call_refused_for_a_secondary_rate_limit_says_so(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    """GitHub answers a secondary rate limit with 403 and its own message, in GraphQL as in REST; the
+    message is what tells it from a refusal of the credential's scope."""
+    gh_github.failures[queries.REPOSITORIES_OPERATION] = rate_limited_rest(403, RESET)
+    snapshot = await gather(gh_config, gh_client)
+    problem = gh_problem(snapshot.problems, "every repository's facts")
+    assert (
+        problem.why == f"GitHub's rate limit is spent; the budget resets at {reset_time(gh_config.time_zone)}"
+    )
