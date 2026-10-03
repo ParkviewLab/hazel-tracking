@@ -12,11 +12,3 @@ path = [".gitignore", ".dockerignore", ".python-version", ".env.example", "uv.lo
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
-
-# The documentation site's hand-built tree (the handbook's docs-site.md), including
-# any asset under it that cannot carry a header.
-[[annotations]]
-path = ["site/**"]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
-SPDX-License-Identifier = "MIT OR Apache-2.0"
