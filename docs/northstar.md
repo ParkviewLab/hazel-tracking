@@ -16,6 +16,8 @@ To let one person see, in a single browser window and without searching, what is
 
 ## Intents
 
+hazel-tracking serves four complementary intents, presented as peers: the first three are its three views, and the fourth holds for every view.
+
 1. The overview: what needs attention, at a glance. One screen, with no scrolling and nothing to click through, shows what is waiting on the reader from every source the Dashboard reads, and the state of each thing it reads (in this version, the release state of every repository); once the Atlas generator groups the repositories into projects, one screen per grouping.
 2. The detail: everything, for every source. Every fact the Dashboard gathers, in one table per source as wide as the window (in this version, one table of every repository), each growing in height with what it holds.
 3. The pull requests: the work arriving. Every open pull request into the integration trunks except the back-merges of releases, each linked to it, with its own refresh that gathers the pull requests alone, cheap enough to repeat as often as new work is expected, and a watch the reader starts that repeats it for a few minutes and marks the arrival or departure of a pull request, or a chosen pull request's change of status.

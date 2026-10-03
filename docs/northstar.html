@@ -69,6 +69,7 @@ header.site .word small{display:block;color:var(--muted);font-size:10.5px;letter
 .panel svg,.figure svg{width:100%;height:auto;display:block;}
 
 /* Intents: the three views side by side, and under them, as wide as all three, the intent that holds for every view */
+.umbrella{font-size:16px;max-width:760px;margin:0 0 18px;}
 .intents{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:8px 0;}
 .intent{position:relative;background:var(--card);border:2px solid var(--ink);padding:24px 20px 20px;overflow:hidden;}
 .intent::before{content:"";position:absolute;top:0;left:0;width:100%;height:8px;background:var(--ac,var(--teal-deep));}
@@ -242,6 +243,7 @@ footer.site{margin-top:64px;border-top:3px solid var(--ink);padding-top:20px;fon
   </div>
 
   <h2 class="section-label">Intents</h2>
+  <p class="umbrella">hazel-tracking serves four complementary intents, presented as peers: the first three are its three views, and the fourth holds for every view.</p>
   <div class="intents">
     <div class="intent"><div class="num">1</div><h3><span class="view">The overview:</span> what needs attention, at a glance.</h3><p>One screen, with no scrolling and nothing to click through, shows what is waiting on the reader from every source the Dashboard reads, and the state of each thing it reads (in this version, the release state of every repository); once the Atlas generator groups the repositories into projects, one screen per grouping.</p></div>
     <div class="intent"><div class="num">2</div><h3><span class="view">The detail:</span> everything, for every source.</h3><p>Every fact the Dashboard gathers, in one table per source as wide as the window (in this version, one table of every repository), each growing in height with what it holds.</p></div>
