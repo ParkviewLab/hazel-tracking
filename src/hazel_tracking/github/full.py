@@ -18,11 +18,18 @@ one another:
   at all;
 - then, for a repository whose tags, branches or open pull requests ran past one
   page, the rest of that list, since each is a list a definition needs whole;
-- then, together, the comparisons (each repository's trunks, for the unreleased work
-  and a pending back-merge, and each working branch's lag) and the second read of any
-  pull-request status GitHub had not computed (R4);
-- then the changed files of the unreleased pull requests, for the documentation mark
-  (R5), which only the comparisons' answer names.
+- then, together, the comparisons and the second read of any pull-request status
+  GitHub had not computed (R4). The comparisons are REST's: one call for a
+  repository's trunks, which gives how far the integration trunk is ahead, the
+  commits it is ahead by, and whether the release trunk holds anything it lacks, and
+  one for each working branch, which gives its lag (R1, R5, R6). GraphQL's
+  `Ref.compare` is not used, because it refuses `aheadBy`, `behindBy` and `status` to
+  a token without the `repo` scope, which this token does not have and by ruling D10
+  must not have (live, 2026-10-03);
+- then, over GraphQL, what the compared commits belong to, by the oids REST gave:
+  their merged pull requests, with the head branch each one is from, which is what the
+  unreleased work counts (R5);
+- then the changed files of those pull requests, for the documentation mark (R5).
 
 Every call that fails costs the facts it feeds and nothing else: the fact is left
 not gathered and a problem names it (R7, axiom 8).
@@ -32,7 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -40,7 +47,16 @@ from urllib.parse import quote
 
 from hazel_tracking.config import Config
 from hazel_tracking.github import facts, problems, queries
-from hazel_tracking.github.calls import PAGE_LIMIT, Reader, Reply, aware, dig, nodes, page_cursor
+from hazel_tracking.github.calls import (
+    PAGE_LIMIT,
+    REST_PAGE,
+    Reader,
+    Reply,
+    aware,
+    dig,
+    nodes,
+    page_cursor,
+)
 from hazel_tracking.github.collecting import groups, guard, report
 from hazel_tracking.model import (
     NOT_GATHERED,
@@ -68,6 +84,10 @@ RELEASE_READY_TRUNKS = Trunks(integration="develop", release="main")
 
 _TAGS, _BRANCHES, _PULLS = "tags", "branches", "pulls"
 
+# How many commits of a comparison GitHub will list, however many pages are asked for; a longer
+# comparison is reported rather than counted (docs.github.com, "Compare two commits").
+COMPARISON_COMMIT_LIMIT = 250
+
 
 @dataclass
 class RepositoryState:
@@ -75,7 +95,10 @@ class RepositoryState:
 
     A list that is `None` is one that was not gathered, which is not the same as one gathered
     and found empty: a repository with no tag has `tags == []` and its newest tag reads "none"
-    (R7). `merged` is the unreleased pull requests by number, with each one's head branch.
+    (R7). `compared` holds the oids of the commits the integration trunk has and the release trunk
+    lacks, which REST's comparison gives, and `merged` the merged pull requests among them by
+    number with each one's head branch, which GraphQL gives for those oids; `compared_failed` marks
+    a comparison that could not be read whole, whose count is then not gathered.
     """
 
     name: str
@@ -93,19 +116,21 @@ class RepositoryState:
     pulls: list[PullRequest] | None = None
     heads: dict[str, PullRequestRef] = field(default_factory=dict)
     uncomputed: set[int] = field(default_factory=set)
+    compared: list[str] | None = None
+    compared_failed: bool = False
     merged: dict[int, str] | None = None
     back_merge_pending: Fact[bool] = NOT_GATHERED
     documentation_found: bool = False
     documentation_failed: bool = False
     cursors: dict[str, str | None] = field(default_factory=dict)
-    compared_cursor: str | None = None
 
     def working_branch_names(self) -> tuple[str, ...]:
         return facts.working_branches(self.branches or (), self.trunks)
 
     def to_model(self, dev_release: Fact[DevRelease | None]) -> Repository:
         """This repository in the words of the contract, every fact it lacks not gathered."""
-        unreleased_count: Fact[int] = Gathered(len(self.merged)) if self.merged is not None else NOT_GATHERED
+        counted = self.merged is not None and not self.compared_failed
+        unreleased_count: Fact[int] = Gathered(len(self.merged or {})) if counted else NOT_GATHERED
         has_release_trunk = self.trunks.release is not None
         return Repository(
             name=self.name,
@@ -124,7 +149,7 @@ class RepositoryState:
         )
 
     def _documentation(self) -> Fact[bool]:
-        if self.merged is None or self.documentation_failed:
+        if self.merged is None or self.compared_failed or self.documentation_failed:
             return NOT_GATHERED
         return Gathered(self.documentation_found)
 
@@ -456,144 +481,179 @@ def _set_status(repository: RepositoryState, number: int, status: PullRequestSta
 
 async def _comparisons(cfg: Config, reader: Reader, state: FullState) -> None:
     """Each repository's trunk comparison, for the unreleased work and a pending back-merge, and
-    each working branch's, for its lag; then the files of the unreleased pull requests, which only
-    these answers name."""
-    targets = [
-        (
-            repository,
-            queries.ComparisonTarget(
-                repository=repository.repository,
-                integration=repository.trunks.integration,
-                release=repository.trunks.release,
-                branches=repository.working_branch_names(),
-            ),
-        )
-        for repository in state.repositories
-        if repository.trunks.integration and (repository.trunks.release or repository.working_branch_names())
-    ]
-    batches = groups(targets, queries.COMPARISON_GROUP)
+    each working branch's, for its lag; then what the compared commits belong to, and the files of
+    those pull requests, which only the comparisons name."""
     async with asyncio.TaskGroup() as group:
-        for index, batch in enumerate(batches, start=1):
-            what = _comparison_what([repository for repository, _ in batch])
-            group.create_task(
-                guard(state.problems, what, _comparison_group(cfg, reader, state, batch, index, len(batches)))
-            )
+        for repository in state.repositories:
+            if not repository.trunks.integration:
+                continue
+            release = repository.trunks.release
+            if release is not None:
+                what = f"the unreleased work of {repository.name}"
+                group.create_task(
+                    guard(state.problems, what, _trunk_comparison(cfg, reader, state, repository, release))
+                )
+            for branch in repository.working_branch_names():
+                what = f"the lag of the branch {branch} of {repository.name}"
+                group.create_task(
+                    guard(state.problems, what, _branch_lag(cfg, reader, state, repository, branch))
+                )
+    await guard(state.problems, "the unreleased pull requests", _commit_pull_requests(cfg, reader, state))
     await guard(state.problems, "the documentation in the unreleased work", _files(cfg, reader, state))
 
 
-def _comparison_what(repositories: Sequence[RepositoryState]) -> str:
-    return "the unreleased work and the branch lag of " + problems.listed([r.name for r in repositories])
+def _compare_path(cfg: Config, repository: RepositoryState, base: str, head: str) -> str:
+    """REST's comparison of two refs of one repository, `base...head`. A branch name's slashes
+    belong to the name and are left as they are, which is the form GitHub's comparison takes."""
+    refs = quote(f"{base}...{head}", safe="/.")
+    return f"/repos/{cfg.github_org}/{repository.repository}/compare/{refs}"
 
 
-async def _comparison_group(
+async def _trunk_comparison(
+    cfg: Config, reader: Reader, state: FullState, repository: RepositoryState, release: str
+) -> None:
+    """The commits the integration trunk has and the release trunk lacks, and whether the release
+    trunk holds any the integration trunk lacks (R5, R6).
+
+    The comparison is read page by page for its commits. GitHub answers at most 250 of them
+    whatever is asked for, so where it says the comparison is longer the count cannot be made and
+    is left not gathered beside a problem saying how far the list went.
+    """
+    integration = repository.trunks.integration
+    call = problems.of_repository(problems.COMPARISON, repository.name)
+    what = f"the unreleased work of {repository.name}"
+    path = _compare_path(cfg, repository, release, integration)
+    oids: list[str] = []
+    total = 0
+    for number in range(1, PAGE_LIMIT + 1):
+        reply = await reader.rest(problems.page(call, number), path, {"per_page": REST_PAGE, "page": number})
+        comparison = reply.data if isinstance(reply.data, Mapping) else None
+        if comparison is None:
+            report(state.problems, cfg, what, reply)
+            if number == 1:
+                report(state.problems, cfg, f"a pending back-merge of {repository.name}", reply)
+            repository.compared_failed = True
+            return
+        if number == 1:
+            behind = comparison.get("behind_by")
+            repository.back_merge_pending = Gathered(behind > 0) if isinstance(behind, int) else NOT_GATHERED
+            counted = comparison.get("total_commits")
+            total = counted if isinstance(counted, int) else 0
+            logger.debug(
+                "%s is ahead of %s by %s commits in %s",
+                integration,
+                release,
+                comparison.get("ahead_by"),
+                repository.name,
+            )
+        page = [
+            sha for commit in comparison.get("commits") or [] if isinstance(sha := dig(commit, "sha"), str)
+        ]
+        oids.extend(page)
+        if len(oids) >= total or not page:
+            break
+    if len(oids) < total:
+        state.problems.append(problems.truncated(what, call, len(oids), total, COMPARISON_COMMIT_LIMIT))
+        repository.compared_failed = True
+        return
+    repository.compared = oids
+    if not oids:
+        repository.merged = {}
+
+
+async def _branch_lag(
+    cfg: Config, reader: Reader, state: FullState, repository: RepositoryState, branch: str
+) -> None:
+    """How far a working branch is behind the default branch, in commits the default branch has
+    and it lacks (R1). Only the count is wanted, so one commit a page is asked for."""
+    call = problems.of_repository(f"{problems.BRANCH_COMPARISON} {branch}", repository.name)
+    path = _compare_path(cfg, repository, repository.trunks.integration, branch)
+    reply = await reader.rest(call, path, {"per_page": 1})
+    behind = dig(reply.data, "behind_by")
+    if isinstance(behind, int):
+        repository.behind[branch] = Gathered(behind)
+    else:
+        report(state.problems, cfg, f"the lag of the branch {branch} of {repository.name}", reply)
+
+
+async def _commit_pull_requests(cfg: Config, reader: Reader, state: FullState) -> None:
+    """What the compared commits belong to: the merged pull requests among them, by the oids the
+    comparisons gave (R5). A commit that belongs to no pull request is a direct commit and counts
+    as none."""
+    waiting = [
+        (repository, oid)
+        for repository in state.repositories
+        if repository.compared
+        for oid in repository.compared
+    ]
+    if not waiting:
+        return
+    batches = groups(waiting, queries.COMMIT_GROUP)
+    async with asyncio.TaskGroup() as group:
+        for index, batch in enumerate(batches, start=1):
+            what = _unreleased_what([repository for repository, _ in batch])
+            group.create_task(
+                guard(state.problems, what, _commit_group(cfg, reader, state, batch, index, len(batches)))
+            )
+
+
+def _unreleased_what(repositories: Sequence[RepositoryState]) -> str:
+    names = problems.listed(sorted({repository.name for repository in repositories}))
+    return f"the unreleased work of {names}"
+
+
+def _by_repository(
+    batch: Sequence[tuple[RepositoryState, str]],
+) -> list[tuple[RepositoryState, list[str]]]:
+    """The batch's commits grouped by their repository, in the batch's order, which is the order
+    the aliases of the query take."""
+    grouped: list[tuple[RepositoryState, list[str]]] = []
+    for repository, oid in batch:
+        if grouped and grouped[-1][0] is repository:
+            grouped[-1][1].append(oid)
+        else:
+            grouped.append((repository, [oid]))
+    return grouped
+
+
+async def _commit_group(
     cfg: Config,
     reader: Reader,
     state: FullState,
-    batch: Sequence[tuple[RepositoryState, queries.ComparisonTarget]],
+    batch: Sequence[tuple[RepositoryState, str]],
     index: int,
     batches: int,
 ) -> None:
-    call = problems.group(problems.COMPARISONS, index, batches)
-    document = queries.comparisons([target for _, target in batch])
+    call = problems.group(problems.COMMITS, index, batches)
+    grouped = _by_repository(batch)
+    document = queries.commit_pull_requests(
+        [queries.CommitTarget(repository=repository.repository, oids=oids) for repository, oids in grouped]
+    )
     reply = await reader.graphql(
         call,
-        queries.COMPARISONS_OPERATION,
+        queries.COMMIT_PULL_REQUESTS_OPERATION,
         document,
-        {
-            "owner": cfg.github_org,
-            "commits": queries.COMPARED_COMMITS_PAGE,
-            "associated": queries.ASSOCIATED_PULL_REQUESTS,
-        },
+        {"owner": cfg.github_org, "associated": queries.ASSOCIATED_PULL_REQUESTS},
     )
     if reply.data is None:
-        report(state.problems, cfg, _comparison_what([repository for repository, _ in batch]), reply)
+        for repository, _ in batch:
+            repository.compared_failed = True
+        report(state.problems, cfg, _unreleased_what([repository for repository, _ in batch]), reply)
         return
-    for position, (repository, target) in enumerate(batch):
+    for position, (repository, oids) in enumerate(grouped):
         answered = dig(reply.data, f"r{position}")
         if answered is None:
-            report(state.problems, cfg, _comparison_what([repository]), reply)
+            repository.compared_failed = True
+            report(state.problems, cfg, _unreleased_what([repository]), reply)
             continue
-        _read_comparison(state, cfg, call, repository, target, answered)
-        if repository.compared_cursor:
-            await _more_compared_commits(cfg, reader, state, repository, target)
-
-
-def _read_comparison(
-    state: FullState,
-    cfg: Config,
-    call: str,
-    repository: RepositoryState,
-    target: queries.ComparisonTarget,
-    answered: Any,
-) -> None:
-    """One repository's comparisons: its trunks' (R5, R6) and each working branch's (R1)."""
-    if target.release is not None:
-        comparison = dig(answered, "trunks", "compare")
-        if comparison is None:
-            report(state.problems, cfg, f"the unreleased work of {repository.name}", Reply(call=call))
-        else:
-            behind_by = dig(comparison, "behindBy")
-            repository.back_merge_pending = (
-                Gathered(behind_by > 0) if isinstance(behind_by, int) else NOT_GATHERED
-            )
-            commits = dig(comparison, "commits")
-            repository.merged = facts.merged_pull_requests(nodes(commits))
-            repository.compared_cursor = page_cursor(commits)
-            logger.debug(
-                "%s is ahead of %s by %s commits and %s merged pull requests",
-                target.integration,
-                target.release,
-                dig(comparison, "aheadBy"),
-                len(repository.merged),
-            )
-    for position, branch in enumerate(target.branches):
-        behind = dig(answered, f"b{position}", "compare", "behindBy")
-        if isinstance(behind, int):
-            repository.behind[branch] = Gathered(behind)
-        else:
-            report(
-                state.problems, cfg, f"the lag of the branch {branch} of {repository.name}", Reply(call=call)
-            )
-
-
-async def _more_compared_commits(
-    cfg: Config,
-    reader: Reader,
-    state: FullState,
-    repository: RepositoryState,
-    target: queries.ComparisonTarget,
-) -> None:
-    """The rest of the commits the integration trunk has and the release trunk lacks. Read to the
-    end or not gathered: the count is a count of the whole comparison (R5)."""
-    call = problems.of_repository(problems.COMPARED_COMMITS, repository.name)
-    what = f"the unreleased work of {repository.name}"
-    cursor = repository.compared_cursor
-    for number in range(2, PAGE_LIMIT + 1):
-        reply = await reader.graphql(
-            problems.page(call, number),
-            queries.COMPARED_COMMITS_OPERATION,
-            queries.COMPARED_COMMITS,
-            {
-                "owner": cfg.github_org,
-                "name": repository.repository,
-                "base": f"refs/heads/{target.release}",
-                "head": target.integration,
-                "cursor": cursor,
-                "commits": queries.COMPARED_COMMITS_PAGE,
-                "associated": queries.ASSOCIATED_PULL_REQUESTS,
-            },
-        )
-        commits = dig(reply.data, "repository", "ref", "compare", "commits")
-        if commits is None:
-            repository.merged = None
-            report(state.problems, cfg, what, reply)
-            return
+        commits = [dig(answered, f"c{place}") for place in range(len(oids))]
+        if any(commit is None for commit in commits):
+            repository.compared_failed = True
+            report(state.problems, cfg, _unreleased_what([repository]), reply)
+            continue
         found = repository.merged if repository.merged is not None else {}
-        found.update(facts.merged_pull_requests(nodes(commits)))
+        found.update(facts.merged_pull_requests(commits))
         repository.merged = found
-        cursor = page_cursor(commits)
-        if cursor is None:
-            return
 
 
 async def _files(cfg: Config, reader: Reader, state: FullState) -> None:

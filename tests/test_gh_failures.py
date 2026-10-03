@@ -23,6 +23,7 @@ from hazel_tracking.gather import gather, gather_pull_requests
 from hazel_tracking.github import queries
 from hazel_tracking.model import NOT_GATHERED, Gathered, Problem, Snapshot
 from tests.gh_fakes import (
+    COMPARE,
     PACKAGES,
     VERSIONS,
     FakeAnswer,
@@ -102,7 +103,9 @@ async def test_one_packages_versions_refused_grey_that_repositorys_dev_release_a
 async def test_a_comparison_that_fails_greys_the_unreleased_work_and_the_lag_alone(
     gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
 ) -> None:
-    gh_github.failures[queries.COMPARISONS_OPERATION] = not_found()
+    """Every comparison of one repository refused: its unreleased work, its readiness, its pending
+    back-merge and each branch's lag are greyed, and nothing else of it is."""
+    gh_github.failures[f"{COMPARE}:atlas"] = not_found()
     snapshot = await gather(gh_config, gh_client)
     atlas = gh_found(snapshot, "atlas")
     assert atlas.unreleased is not None
@@ -114,8 +117,13 @@ async def test_a_comparison_that_fails_greys_the_unreleased_work_and_the_lag_alo
     assert [branch.behind for branch in atlas.working_branches.value] == [NOT_GATHERED] * 3
     assert isinstance(atlas.pull_requests, Gathered)
     assert all(isinstance(check.state, Gathered) for check in atlas.checks)
-    problem = gh_problem(snapshot.problems, "the unreleased work and the branch lag")
+    problem = gh_problem(snapshot.problems, f"the unreleased work of {ORGANISATION}/atlas")
     assert problem.why == "GitHub found nothing to read"
+    assert problem.details[0].call.startswith("the comparison of the trunks")
+    basalt = gh_found(snapshot, "basalt")
+    assert basalt.unreleased is not None
+    assert basalt.unreleased.pull_requests == Gathered(0)
+    assert basalt.back_merge_pending == Gathered(True)
 
 
 async def test_the_files_that_fail_grey_the_documentation_mark_alone(
@@ -169,11 +177,11 @@ async def test_an_error_beside_the_data_keeps_the_data_and_names_the_problem(
     assert problem.details[0].message == "Something went wrong"
 
 
-async def test_a_comparison_answered_with_a_null_is_a_problem_of_its_own(
+async def test_a_branch_github_no_longer_holds_is_a_problem_of_its_own(
     gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
 ) -> None:
-    """GitHub answers a ref it cannot resolve with a null, as it does for a branch deleted between
-    two calls."""
+    """A branch deleted between two calls: its comparison has nothing to read, and its lag alone is
+    greyed."""
     gh_github.organisation = replace(
         gh_github.organisation,
         repositories=tuple(
@@ -190,7 +198,7 @@ async def test_a_comparison_answered_with_a_null_is_a_problem_of_its_own(
     assert lags["feature-charts"] == NOT_GATHERED
     assert lags["hotfix-pick"] == Gathered(0)
     problem = gh_problem(snapshot.problems, "the lag of the branch feature-charts")
-    assert problem.why == "GitHub answered without it"
+    assert problem.why == "GitHub found nothing to read"
 
 
 async def test_a_call_that_gives_no_answer_at_all_is_a_problem(
@@ -210,10 +218,10 @@ async def test_a_call_that_gives_no_answer_at_all_is_a_problem(
 async def test_graphqls_refusal_for_the_rate_limit_says_when_the_budget_resets(
     gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
 ) -> None:
-    gh_github.failures[queries.COMPARISONS_OPERATION] = rate_limited_graphql(RESET)
+    gh_github.failures[queries.COMMIT_PULL_REQUESTS_OPERATION] = rate_limited_graphql(RESET)
     snapshot = await gather(gh_config, gh_client)
     assert snapshot.completed
-    problem = gh_problem(snapshot.problems, "the unreleased work and the branch lag")
+    problem = gh_problem(snapshot.problems, "the unreleased work of")
     assert (
         problem.why == f"GitHub's rate limit is spent; the budget resets at {reset_time(gh_config.time_zone)}"
     )
@@ -271,7 +279,7 @@ async def test_a_gather_cut_short_before_the_repositories_arrive_shows_none_of_t
 async def test_a_gather_cut_short_after_the_repositories_arrive_keeps_what_did(
     gh_config: Config, gh_github: FakeGitHub
 ) -> None:
-    gh_github.delays[queries.COMPARISONS_OPERATION] = 0.5
+    gh_github.delays[COMPARE] = 0.5
     cfg = hurried(gh_config)
     async with default_http_client(cfg, transport=gh_github.transport()) as client:
         snapshot = await gather(cfg, client)
@@ -285,7 +293,7 @@ async def test_a_gather_cut_short_after_the_repositories_arrive_keeps_what_did(
     assert atlas.unreleased.pull_requests == NOT_GATHERED
     assert atlas.readiness == NOT_GATHERED
     problem = gh_problem(snapshot.problems, "the facts GitHub had not yet given")
-    assert any("comparison" in detail.call for detail in problem.details)
+    assert any("the comparison" in detail.call for detail in problem.details)
 
 
 async def test_a_gather_of_the_open_pull_requests_cut_short_shows_no_list(
@@ -314,7 +322,7 @@ async def test_the_token_appears_in_no_problem_and_no_log_record(
     """Every failure at once, GitHub echoing the token in two of its own messages."""
     echoed = FakeAnswer(status=403, payload={"message": f"the token {sentinel_token} is not allowed"})
     gh_github.failures[PACKAGES] = echoed
-    gh_github.failures[queries.COMPARISONS_OPERATION] = graphql_error(f"bad token {sentinel_token}")
+    gh_github.failures[queries.COMMIT_PULL_REQUESTS_OPERATION] = graphql_error(f"bad token {sentinel_token}")
     gh_github.failures[queries.STATUSES_OPERATION] = unauthorised()
     gh_github.errors[queries.REPOSITORIES_OPERATION] = [{"message": f"token {sentinel_token}"}]
     with caplog.at_level(logging.DEBUG):
@@ -399,13 +407,20 @@ async def test_a_list_of_open_pull_requests_cut_short_is_not_gathered(
     gh_problem(snapshot.problems, f"the open pull requests of {ORGANISATION}/atlas")
 
 
-async def test_a_comparison_cut_short_greys_the_count_and_keeps_the_back_merge(
+async def test_a_comparison_github_will_not_list_whole_greys_the_count_and_keeps_the_back_merge(
     gh_config: Config, gh_organisation: FakeOrganisation
 ) -> None:
-    """The count is a count of the whole comparison; whether the release trunk holds anything the
-    integration trunk lacks is answered by the first page alone."""
-    fake = FakeGitHub(organisation=gh_organisation, page_cap=1)
-    fake.failures[queries.COMPARED_COMMITS_OPERATION] = server_error()
+    """GitHub's comparison lists at most 250 commits however many pages are asked for, so a longer
+    comparison cannot be counted; whether the release trunk holds anything the integration trunk
+    lacks is answered by the same call and stands."""
+    organisation = replace(
+        gh_organisation,
+        repositories=tuple(
+            replace(repository, ahead_total=300) if repository.name == "atlas" else repository
+            for repository in gh_organisation.repositories
+        ),
+    )
+    fake = FakeGitHub(organisation=organisation)
     async with default_http_client(gh_config, transport=fake.transport()) as client:
         snapshot = await gather(gh_config, client)
     atlas = gh_found(snapshot, "atlas")
@@ -414,4 +429,29 @@ async def test_a_comparison_cut_short_greys_the_count_and_keeps_the_back_merge(
     assert atlas.unreleased.documentation == NOT_GATHERED
     assert atlas.back_merge_pending == Gathered(False)
     assert atlas.readiness == NOT_GATHERED
-    gh_problem(snapshot.problems, f"the unreleased work of {ORGANISATION}/atlas")
+    problem = gh_problem(snapshot.problems, f"the unreleased work of {ORGANISATION}/atlas")
+    assert problem.why == "GitHub listed only 4 of the 300 commits of the comparison"
+    assert problem.details[0].message == "GitHub's comparison lists at most 250 commits"
+
+
+async def test_a_comparison_refused_for_want_of_a_scope_says_so(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    """GraphQL refuses a field the token's scopes do not reach with status 200 and an
+    INSUFFICIENT_SCOPES error, as it does `Ref.compare`'s counts; the problem names the credential
+    in general terms and its detail carries GitHub's own message."""
+    message = (
+        "Your token has not been granted the required scopes to execute this query. "
+        "The 'aheadBy' field requires one of the following scopes: ['repo'], but your token has "
+        "only been granted the: ['read:packages'] scopes."
+    )
+    gh_github.failures[queries.COMMIT_PULL_REQUESTS_OPERATION] = FakeAnswer(
+        status=200,
+        payload={"data": None, "errors": [{"type": "INSUFFICIENT_SCOPES", "message": message}]},
+    )
+    snapshot = await gather(gh_config, gh_client)
+    assert snapshot.completed
+    problem = gh_problem(snapshot.problems, "the unreleased work of")
+    assert problem.why == "GitHub refused the call; the GitHub token lacks the scope it would need"
+    assert problem.details[0].message == message
+    assert problem.details[0].status == 200

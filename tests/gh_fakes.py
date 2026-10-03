@@ -37,14 +37,10 @@ import httpx
 # REST reads by these keys.
 PACKAGES = "packages"
 VERSIONS = "versions"
+COMPARE = "compare"
 
 _REPOSITORY_LINE = re.compile(r'^\s*(r\d+): repository\(owner: \$owner, name: "([^"]+)"\) \{$')
-_TRUNKS_LINE = re.compile(
-    r'^\s*trunks: ref\(qualifiedName: "refs/heads/([^"]+)"\) \{ compare\(headRef: "([^"]+)"\)'
-)
-_BRANCH_LINE = re.compile(
-    r'^\s*(b\d+): ref\(qualifiedName: "refs/heads/[^"]+"\) \{ compare\(headRef: "([^"]+)"\)'
-)
+_COMMIT_LINE = re.compile(r'^\s*(c\d+): object\(oid: "([^"]+)"\)')
 _PULL_LINE = re.compile(
     r'^\s*([fs]\d+): repository\(owner: \$owner, name: "([^"]+)"\) \{ pullRequest\(number: (\d+)\)'
 )
@@ -91,6 +87,10 @@ class FakeRepository:
 
     `ahead` are the commits the integration trunk has and the release trunk lacks, and `behind`
     how many the release trunk has that the integration trunk lacks (a pending back-merge).
+    `ahead_missing` are oids the comparison lists and the repository will not resolve, as happens
+    where a branch is rewritten between the two calls. `ahead_total` is the number GitHub reports
+    where it will not list them all, the 250 of its comparison: where it is set, the comparison
+    says it is longer than the commits it gives.
     `files` are the paths each merged pull request changed. `missing` names a ref GitHub answers
     with a null, as it does for a branch deleted between two calls.
     """
@@ -106,6 +106,8 @@ class FakeRepository:
     history: Mapping[str, Sequence[FakeCommit]] = field(default_factory=dict)
     pulls: Sequence[FakePullRequest] = ()
     ahead: Sequence[FakeCommit] = ()
+    ahead_missing: Sequence[str] = ()
+    ahead_total: int | None = None
     behind: int = 0
     branch_behind: Mapping[str, int] = field(default_factory=dict)
     files: Mapping[int, Sequence[str]] = field(default_factory=dict)
@@ -256,10 +258,8 @@ class FakeGitHub:
             return self._refs(variables)
         if operation == "RepositoryPullRequests":
             return self._repository_pulls(variables)
-        if operation == "Comparisons":
-            return self._comparisons(document, variables)
-        if operation == "ComparedCommits":
-            return self._compared_commits(variables)
+        if operation == "CommitPullRequests":
+            return self._commit_pull_requests(document, variables)
         if operation == "PullRequestFiles":
             return self._files(document, variables)
         if operation == "PullRequestFilesPage":
@@ -373,9 +373,9 @@ class FakeGitHub:
             }
         }
 
-    # The comparisons.
+    # What the compared commits belong to, by the oids REST's comparison gave.
 
-    def _comparisons(self, document: str, variables: Mapping[str, Any]) -> dict[str, Any]:
+    def _commit_pull_requests(self, document: str, variables: Mapping[str, Any]) -> dict[str, Any]:
         data: dict[str, Any] = {}
         alias: str | None = None
         repository: FakeRepository | None = None
@@ -383,46 +383,24 @@ class FakeGitHub:
             found = _REPOSITORY_LINE.match(line)
             if found:
                 alias, repository = found.group(1), self.repository(found.group(2))
-                data[alias] = {"nameWithOwner": self._full_name(repository)}
+                data[alias] = {}
                 continue
-            if alias is None or repository is None:
-                continue
-            trunks = _TRUNKS_LINE.match(line)
-            if trunks:
-                data[alias]["trunks"] = (
-                    None
-                    if trunks.group(1) in repository.missing
-                    else {"compare": self._comparison(repository, variables, None)}
-                )
-                continue
-            branch = _BRANCH_LINE.match(line)
-            if branch:
-                name = branch.group(2)
-                data[alias][branch.group(1)] = (
-                    None
-                    if name in repository.missing
-                    else {"compare": {"behindBy": repository.branch_behind.get(name, 0)}}
+            commit = _COMMIT_LINE.match(line)
+            if commit and alias is not None and repository is not None:
+                found_commit = self._commit(repository, commit.group(2))
+                associated = int(variables.get("associated") or 10)
+                data[alias][commit.group(1)] = (
+                    None if found_commit is None else self._commit_node(found_commit, associated)
                 )
         return data
 
-    def _comparison(
-        self, repository: FakeRepository, variables: Mapping[str, Any], cursor: str | None
-    ) -> dict[str, Any]:
-        associated = int(variables.get("associated") or 10)
-        commits, info = self._page(list(repository.ahead), cursor, variables.get("commits"))
-        return {
-            "aheadBy": len(repository.ahead),
-            "behindBy": repository.behind,
-            "commits": {
-                "pageInfo": info,
-                "nodes": [self._commit_node(commit, associated) for commit in commits],
-            },
-        }
-
-    def _compared_commits(self, variables: Mapping[str, Any]) -> dict[str, Any]:
-        repository = self.repository(str(variables["name"]))
-        comparison = self._comparison(repository, variables, variables.get("cursor"))
-        return {"repository": {"ref": {"compare": comparison}}}
+    def _commit(self, repository: FakeRepository, oid: str) -> FakeCommit | None:
+        """The commit of that oid, among the compared commits and the trunks' histories; `None`
+        where the repository holds no such commit, which GitHub answers with a null."""
+        for commit in (*repository.ahead, *(c for commits in repository.history.values() for c in commits)):
+            if commit.oid == oid:
+                return commit
+        return None
 
     # The files of a pull request, and a second read of a status.
 
@@ -479,10 +457,23 @@ class FakeGitHub:
             }
         }
 
-    # REST: the organisation's container packages and their versions.
+    # REST: the comparisons, the organisation's container packages and their versions.
 
     async def _rest(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        if "/compare/" in path:
+            owner, name = path.split("/repos/", 1)[1].split("/compare/", 1)[0].split("/")
+            repository = self.repository(name)
+            keys = (f"{COMPARE}:{name}", COMPARE)
+            self.calls.append(keys[0])
+            await self._delay(*keys)
+            self._refuse(*keys)
+            forced = self._forced(*keys)
+            if forced is not None:
+                return self._response(forced)
+            refs = path.split("/compare/", 1)[1]
+            assert owner == self.organisation.login
+            return self._response(self._comparison(repository, refs, request))
         if path.endswith("/versions"):
             package = path.rsplit("/", 2)[-2]
             keys = (f"{VERSIONS}:{package}", VERSIONS)
@@ -502,6 +493,40 @@ class FakeGitHub:
                 return self._response(forced)
             return self._response(FakeAnswer(status=200, payload=self._packages(request)))
         raise AssertionError(f"the fake was asked a path it does not know: {path}")
+
+    def _comparison(self, repository: FakeRepository, refs: str, request: httpx.Request) -> FakeAnswer:
+        """REST's comparison of `base...head`, as GitHub answers it: the counts both ways and the
+        commits of the range, a page at a time. `total_commits` is `ahead_total` where a test gives
+        one, which is how GitHub reports a comparison longer than the 250 commits it will list."""
+        base, _, head = refs.partition("...")
+        if base in repository.missing or head in repository.missing:
+            return not_found()
+        if head not in repository.trunks():
+            if head not in repository.ref_names():
+                return not_found()
+            return FakeAnswer(
+                status=200,
+                payload={
+                    "status": "behind",
+                    "ahead_by": 0,
+                    "behind_by": repository.branch_behind.get(head, 0),
+                    "total_commits": 0,
+                    "commits": [],
+                },
+            )
+        listed = [{"sha": commit.oid} for commit in repository.ahead]
+        listed += [{"sha": oid} for oid in repository.ahead_missing]
+        total = repository.ahead_total if repository.ahead_total is not None else len(listed)
+        return FakeAnswer(
+            status=200,
+            payload={
+                "status": "ahead" if listed else "identical",
+                "ahead_by": total,
+                "behind_by": repository.behind,
+                "total_commits": total,
+                "commits": self._rest_page(listed, request),
+            },
+        )
 
     def _packages(self, request: httpx.Request) -> list[dict[str, Any]]:
         listed = [

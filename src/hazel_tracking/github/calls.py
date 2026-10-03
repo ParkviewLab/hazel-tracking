@@ -27,6 +27,7 @@ log record or an exception message (docs/what-it-shows.md, "Constraints").
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -52,6 +53,10 @@ REST_PAGE = 100
 # A guard, not a definition: no list the lab holds runs to this many pages, and a source
 # that never ends must not hold a gather open.
 PAGE_LIMIT = 20
+# How many REST calls a gather has in flight at once. The comparisons are one call a repository
+# and one a working branch, which for the lab is some two dozen; GitHub asks a client to keep its
+# concurrent calls modest, and nothing here is the faster for exceeding that.
+REST_AT_ONCE = 8
 # A source's own message is carried this far and no further.
 MESSAGE_LIMIT = 300
 
@@ -70,6 +75,7 @@ class FailureKind(StrEnum):
     RATE_LIMITED = "the rate limit is spent"
     NOT_FOUND = "nothing to read"
     FAILED = "GitHub failed"
+    SCOPE_REFUSED = "the token lacks a scope"
     UNREADABLE = "the answer could not be read"
     ERROR = "GitHub answered with an error"
 
@@ -174,6 +180,9 @@ class Reader:
     rate_limit: RateLimit | None = None
     credential_expires_at: datetime | None = None
     _in_flight: dict[str, int] = field(default_factory=dict, repr=False)
+    _rest_at_once: asyncio.Semaphore = field(
+        default_factory=lambda: asyncio.Semaphore(REST_AT_ONCE), repr=False
+    )
 
     @property
     def outstanding(self) -> tuple[str, ...]:
@@ -200,8 +209,9 @@ class Reader:
         return Reply(call=call, data=data)
 
     async def rest(self, call: str, path: str, params: Mapping[str, Any] | None = None) -> Reply:
-        """One REST call."""
-        sent = await self._send(call, "GET", path, params=params, headers=_REST_HEADERS)
+        """One REST call, no more than `REST_AT_ONCE` of them in flight at a time."""
+        async with self._rest_at_once:
+            sent = await self._send(call, "GET", path, params=params, headers=_REST_HEADERS)
         if isinstance(sent, Failure):
             return Reply(call=call, failure=sent)
         if sent.status_code >= 400:
@@ -274,6 +284,16 @@ class Reader:
 
     def _graphql_failure(self, call: str, answer: httpx.Response, errors: Any) -> Failure:
         listed = [error for error in errors if isinstance(error, Mapping)] if isinstance(errors, list) else []
+        if any(error.get("type") == "INSUFFICIENT_SCOPES" for error in listed):
+            # GraphQL refuses a field the credential's scopes do not reach with status 200 and an
+            # error of this type, as it does `Ref.compare`'s counts to a token without `repo`.
+            message = next((error.get("message") for error in listed if error.get("message")), None)
+            return Failure(
+                call=call,
+                kind=FailureKind.SCOPE_REFUSED,
+                status=answer.status_code,
+                message=self._message(message),
+            )
         if any(error.get("type") == "RATE_LIMITED" for error in listed):
             return Failure(
                 call=call,

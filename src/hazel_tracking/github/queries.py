@@ -4,20 +4,28 @@
 
 """The GraphQL documents the gathering sends, and the sizes of the lists they ask for.
 
-Three of them name several targets at once, by alias, because one query for sixteen
-repositories costs what sixteen queries cost and takes one round trip instead of
-sixteen: the comparisons, the files of the unreleased pull requests, and the second
-read of a status GitHub had not computed (R4). Each writes one target to a line, in
-a fixed shape, which is also how the tests' fake GitHub reads its aliases back.
-Everything else travels as a variable, so that no value this module did not write
-reaches a document.
+There is no comparison here: GraphQL's `Ref.compare` refuses `aheadBy`, `behindBy`
+and `status` to a token without the `repo` scope, which this token does not have and
+by ruling D10 must not have, so the comparisons are read over REST (`full.py`) and
+what the compared commits belong to is read here, by commit, with the oids REST gave.
 
-The sizes below keep every query inside GitHub's limit of 500,000 nodes: the
-repositories query asks for about 7,000 nodes a page and the comparisons for about
-10,000 a repository. Every list a definition needs whole is read to its end, by the
-cursor its answer carries; `associatedPullRequests` is the one list asked for at a
-size rather than paged, since a commit belongs to its own pull request and, after a
-release, to the back-merge's, never to ten.
+Three documents name several targets at once, by alias, because one query for sixteen
+repositories costs what sixteen cost separately and takes one round trip instead of
+sixteen: the pull requests of the compared commits, the files of the unreleased pull
+requests, and the second read of a status GitHub had not computed (R4). Each writes
+one target to a line, in a fixed shape, which is also how the tests' fake GitHub
+reads its aliases back. Everything else travels as a variable, so that no value this
+module did not write reaches a document.
+
+The sizes below keep every query inside GitHub's limit of 500,000 nodes, and its cost
+within reason, a query's points being its nodes by the hundred: the repositories
+query asks for about 7,000 nodes a page, the commits' pull requests about 11 a
+commit, and the files 101 a pull request, which is why the files are asked for once
+for each unreleased pull request and not once for each commit of one. Every list a
+definition needs whole is read to its end, by the cursor its answer carries;
+`associatedPullRequests` is the one list asked for at a size rather than paged, since
+a commit belongs to its own pull request and, after a release, to the back-merge's,
+never to ten.
 """
 
 from __future__ import annotations
@@ -31,13 +39,12 @@ REPOSITORIES_PAGE = 25
 REFS_PAGE = 100
 PULL_REQUESTS_PAGE = 50
 HISTORY_DEPTH = 10  # commits of a trunk, newest first, in which R2 looks for the checks
-COMPARED_COMMITS_PAGE = 50
 ASSOCIATED_PULL_REQUESTS = 10
 FILES_PAGE = 100
 SEARCH_PAGE = 100
 
 # How many targets one aliased query names.
-COMPARISON_GROUP = 8
+COMMIT_GROUP = 50
 PULL_REQUEST_GROUP = 20
 
 _RATE_LIMIT = "  rateLimit { cost remaining resetAt }"
@@ -62,15 +69,10 @@ _PULL_REQUEST_FACTS = """fragment PullRequestFacts on PullRequest {
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }"""
 
-_COMPARED_COMMIT = """fragment ComparedCommit on Commit {
+_COMMIT_PULL_REQUESTS = """fragment CommitPullRequests on Commit {
   oid
   associatedPullRequests(first: $associated) { nodes { number headRefName merged } }
 }"""
-
-_COMPARISON = (
-    "compare(headRef: %s) { aheadBy behindBy commits(first: $commits) "
-    "{ pageInfo { hasNextPage endCursor } nodes { ...ComparedCommit } } }"
-)
 
 
 def _document(*parts: str) -> str:
@@ -140,26 +142,6 @@ REPOSITORY_PULL_REQUESTS = _document(
     _PULL_REQUEST_FACTS,
 )
 
-COMPARED_COMMITS_OPERATION = "ComparedCommits"
-COMPARED_COMMITS = _document(
-    """query ComparedCommits($owner: String!, $name: String!, $base: String!, $head: String!, $cursor: String, $commits: Int!, $associated: Int!) {""",
-    _RATE_LIMIT,
-    """  repository(owner: $owner, name: $name) {
-    ref(qualifiedName: $base) {
-      compare(headRef: $head) {
-        aheadBy
-        behindBy
-        commits(first: $commits, after: $cursor) {
-          pageInfo { hasNextPage endCursor }
-          nodes { ...ComparedCommit }
-        }
-      }
-    }
-  }
-}""",
-    _COMPARED_COMMIT,
-)
-
 FILES_PAGE_OPERATION = "PullRequestFilesPage"
 FILES_PAGE_QUERY = _document(
     """query PullRequestFilesPage($owner: String!, $name: String!, $number: Int!, $cursor: String, $files: Int!) {""",
@@ -193,44 +175,38 @@ OPEN_PULL_REQUESTS = _document(
     _PULL_REQUEST_FACTS,
 )
 
-COMPARISONS_OPERATION = "Comparisons"
+COMMIT_PULL_REQUESTS_OPERATION = "CommitPullRequests"
 FILES_OPERATION = "PullRequestFiles"
 STATUSES_OPERATION = "PullRequestStatuses"
 
 
 @dataclass(frozen=True)
-class ComparisonTarget:
-    """One repository's comparisons: its trunks', where it has a release trunk (R1), and one for
-    each working branch, whose lag is measured against the integration trunk, the default
-    branch."""
+class CommitTarget:
+    """The compared commits of one repository, by the oids REST's comparison gave."""
 
-    repository: str  # the name alone, as GitHub's `name` argument takes it
-    integration: str
-    release: str | None
-    branches: Sequence[str]
+    repository: str
+    oids: Sequence[str]
 
 
-def comparisons(targets: Sequence[ComparisonTarget]) -> str:
-    """The aliased comparison query for these repositories: `r<i>` for each repository, `trunks`
-    for its trunks' comparison and `b<j>` for each working branch's, one to a line."""
+def commit_pull_requests(targets: Sequence[CommitTarget]) -> str:
+    """The aliased query for what the compared commits belong to: `r<i>` for each repository and
+    `c<j>` for each of its commits, one to a line.
+
+    GitHub resolves a commit by its oid through `object`, which answers any git object, so the
+    fragment names the kind it wants. A commit the repository does not hold answers as a null,
+    which the reading reports rather than reads as "no pull request" (R5).
+    """
     lines = [
-        "query Comparisons($owner: String!, $commits: Int!, $associated: Int!) {",
+        "query CommitPullRequests($owner: String!, $associated: Int!) {",
         _RATE_LIMIT,
     ]
     for index, target in enumerate(targets):
         lines.append(f"  r{index}: repository(owner: $owner, name: {_literal(target.repository)}) {{")
-        # Named in every block, so that a repository with neither a release trunk nor a working
-        # branch still asks for something and the aliases keep their places.
-        lines.append("    nameWithOwner")
-        if target.release is not None:
-            comparison = _COMPARISON % _literal(target.integration)
-            lines.append(f"    trunks: {_ref(target.release)} {{ {comparison} }}")
-        for branch_index, branch in enumerate(target.branches):
-            behind = f"compare(headRef: {_literal(branch)}) {{ behindBy }}"
-            lines.append(f"    b{branch_index}: {_ref(target.integration)} {{ {behind} }}")
+        for position, oid in enumerate(target.oids):
+            lines.append(f"    c{position}: object(oid: {_literal(oid)}) {{ ...CommitPullRequests }}")
         lines.append("  }")
     lines.append("}")
-    return _document(*lines, _COMPARED_COMMIT)
+    return _document(*lines, _COMMIT_PULL_REQUESTS)
 
 
 @dataclass(frozen=True)
@@ -266,10 +242,6 @@ def statuses(targets: Sequence[PullRequestTarget]) -> str:
         )
     lines.append("}")
     return _document(*lines, _PULL_REQUEST_FACTS)
-
-
-def _ref(branch: str) -> str:
-    return f"ref(qualifiedName: {_literal(f'refs/heads/{branch}')})"
 
 
 def search_query(org: str) -> str:

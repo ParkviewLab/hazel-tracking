@@ -28,7 +28,14 @@ from hazel_tracking.model import (
     ReleaseCondition,
     Trunks,
 )
-from tests.gh_fakes import FakeGitHub, FakeOrganisation, FakePackage, FakeRepository
+from tests.gh_fakes import (
+    FakeAssociated,
+    FakeCommit,
+    FakeGitHub,
+    FakeOrganisation,
+    FakePackage,
+    FakeRepository,
+)
 from tests.gh_fixtures import ORGANISATION, gh_found
 
 
@@ -284,3 +291,58 @@ async def test_the_pages_of_a_pull_requests_files_are_read_until_the_documentati
     atlas = gh_found(snapshot, "atlas")
     assert atlas.unreleased is not None
     assert atlas.unreleased.documentation == Gathered(True)
+
+
+# The comparisons, which are REST's: GraphQL refuses their counts to this token (live, 2026-10-03).
+
+
+async def test_the_comparisons_are_read_over_rest_and_the_commits_over_graphql(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    await gather(gh_config, gh_client)
+    assert gh_github.asked("compare:atlas") == 4  # its trunks and its three working branches
+    assert gh_github.asked("compare:cedar") == 1  # one trunk, so its branch alone is compared
+    assert gh_github.asked(queries.COMMIT_PULL_REQUESTS_OPERATION) == 1
+
+
+async def test_a_comparison_longer_than_one_page_is_read_to_its_end(gh_config: Config) -> None:
+    """REST lists the compared commits a hundred at a time; the count is of the whole comparison."""
+    ahead = tuple(
+        FakeCommit(f"c{index}", pulls=(FakeAssociated(7 if index < 120 else 8, "feature-long"),))
+        for index in range(150)
+    )
+    organisation = FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(FakeRepository(name="atlas", tags=("v1.0.0",), latest_release="v1.0.0", ahead=ahead),),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert snapshot.problems == ()
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == Gathered(2)
+    assert fake.asked("compare:atlas") == 2
+    assert fake.asked(queries.COMMIT_PULL_REQUESTS_OPERATION) == 3  # 150 commits, fifty to a query
+
+
+async def test_a_compared_commit_the_repository_will_not_resolve_greys_the_count(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    """A commit the comparison listed and the repository no longer holds, as after a rewrite: what
+    it belonged to cannot be read, so the count is not gathered."""
+    organisation = replace(
+        gh_organisation,
+        repositories=tuple(
+            replace(repository, ahead_missing=("deadbeef",)) if repository.name == "atlas" else repository
+            for repository in gh_organisation.repositories
+        ),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == NOT_GATHERED
+    assert atlas.back_merge_pending == Gathered(False)
+    assert gh_found(snapshot, "brightwork.example").unreleased is not None

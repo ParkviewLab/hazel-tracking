@@ -28,8 +28,9 @@ REPOSITORIES = "the organisation's repositories"
 PACKAGES = "the organisation's container packages"
 SEARCH = "the organisation's open pull requests"
 STATUSES = "the pull requests whose status GitHub had not computed"
-COMPARISONS = "the comparisons"
-COMPARED_COMMITS = "the compared commits"
+COMPARISON = "the comparison of the trunks"
+BRANCH_COMPARISON = "the comparison of the branch"
+COMMITS = "the pull requests of the compared commits"
 FILES = "the files of the unreleased pull requests"
 
 
@@ -84,6 +85,20 @@ def empty(what: str, call: str) -> Problem:
     )
 
 
+def truncated(what: str, call: str, listed: int, total: int, limit: int) -> Problem:
+    """The problem a comparison GitHub will not list whole makes: its answer carries at most
+    `limit` commits, however many pages are asked for, so a longer comparison cannot be counted."""
+    return Problem(
+        what=what,
+        why=f"GitHub listed only {listed} of the {total} commits of the comparison",
+        details=(
+            ProblemDetail(
+                call=call, status=200, message=f"GitHub's comparison lists at most {limit} commits"
+            ),
+        ),
+    )
+
+
 def timed_out(wait_seconds: float, outstanding: Iterable[str]) -> Problem:
     """The problem a gather not complete within the wait makes, its detail naming each call still
     outstanding (R11)."""
@@ -104,6 +119,8 @@ def why(failure: Failure, zone: ZoneInfo | None = None) -> str:
         return f"GitHub's rate limit is spent; the budget resets at {_time(failure.resets_at, zone)}"
     if failure.kind is FailureKind.TOKEN_REFUSED:
         return "the GitHub token was refused"
+    if failure.kind is FailureKind.SCOPE_REFUSED:
+        return "GitHub refused the call; the GitHub token lacks the scope it would need"
     if failure.kind is FailureKind.REFUSED:
         return "GitHub refused the call; the GitHub token may not be allowed to read it"
     if failure.kind is FailureKind.NOT_FOUND:
