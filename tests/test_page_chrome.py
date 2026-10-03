@@ -16,6 +16,7 @@ import asyncio
 import re
 from datetime import UTC, datetime
 
+from nicegui import ui
 from nicegui.testing import User
 
 from hazel_tracking.config import DISPLAY_NAME, VERSION
@@ -114,3 +115,26 @@ async def test_refresh_is_disabled_while_a_gather_runs(user: User, page_plan: Pl
     assert not button.enabled
     hold.set()
     await until(lambda: button.enabled)
+
+
+async def test_the_interactive_elements_are_only_those_the_page_names(user: User, page_plan: Plan) -> None:
+    """The chrome's Refresh, the three tabs, the tab's Refresh and Watch, a Watch on each listed
+    pull request, the information icon and the dialog's Close; the links are markup, not elements."""
+    await open_page(user, page_plan, scenarios.failures())
+    buttons = [element for element in user.client.layout.descendants() if isinstance(element, ui.button)]
+    marks = sorted(mark for button in buttons for mark in button._markers)
+    assert marks == sorted(
+        [
+            "refresh",
+            "pull-requests-refresh",
+            "watch",
+            "status-icon",
+            *[
+                f"watch-{open_pull_request.repository}-{open_pull_request.pull_request.number}"
+                for open_pull_request in scenarios.OPEN
+            ],
+        ]
+    )
+    assert len(buttons) == len(marks) + 1, "the dialog's Close is the one button without a mark"
+    tabs = [element for element in user.client.layout.descendants() if isinstance(element, ui.tab)]
+    assert len(tabs) == 3

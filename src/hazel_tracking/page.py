@@ -214,7 +214,8 @@ class Dashboard:
         self._spinner.mark("spinner")
         with self._spinner:
             ui.spinner(size="6em", color=theme.TEAL)
-        self._spinner.set_visibility(False)
+        # The page is drawn with the spinner already over it, since the gathers its opening runs
+        # begin as soon as the browser has connected and it is covered until they return.
 
     def _dialog_element(self) -> None:
         with (
