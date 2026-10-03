@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# What this repository publishes, and where it differs from the handbook's
+# release parts (dev-tools' assemble-workflows --check; see the handbook's
+# ci.md, "`release.yml`: on `v*` tag push").
+targets = ["docker"]
+dev = true
+header = """# SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+"""
