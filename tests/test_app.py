@@ -118,6 +118,7 @@ def _snapshot() -> Snapshot:
         archived=0,
         problems=(),
         rate_limit=None,
+        credential_expires_at=None,
     )
 
 

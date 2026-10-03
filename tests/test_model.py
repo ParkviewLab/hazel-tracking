@@ -137,6 +137,7 @@ def test_a_snapshot_holds_each_shape_of_repository_and_its_problems() -> None:
         archived=2,
         problems=(problem,),
         rate_limit=RateLimit(remaining=4927, resets_at=BEGAN),
+        credential_expires_at=datetime(2027, 9, 18, tzinfo=UTC),
     )
     assert [r.trunks.release for r in snapshot.repositories] == ["main", "live", None]
     assert snapshot.problems[0].details[0].status == 403
@@ -158,6 +159,7 @@ def test_a_gather_not_complete_before_the_list_arrived_holds_no_repository() -> 
             Problem(what="everything", why="GitHub did not answer within the wait.", details=outstanding),
         ),
         rate_limit=None,
+        credential_expires_at=None,
     )
     assert not snapshot.completed
     assert snapshot.repositories == ()

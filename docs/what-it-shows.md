@@ -98,7 +98,7 @@ The status is the first that applies of: draft, conflicts, checks failing, check
 
 Every open pull request into a repository's integration trunk across the organisation, Dependabot's included, except those from `back-merge-` branches, on one list: each with its repository, its number and title linked to it, and its status as R4 reads it. The tab carries the time of its own gather.
 
-The tab is gathered when the page is opened and when the chrome's Refresh is pressed, and it has two buttons of its own. Its Refresh gathers the open pull requests alone, by one search, which costs GitHub one point. Watch gathers them every 10 seconds and stops when the set of open pull requests changes (a pull request, by repository and number, appears or disappears), after 10 minutes, when the reader leaves the tab, or when the page is closed; moving to another browser tab or another application does not stop it. While it watches, the button says so, and pressing it again cancels the watch. When the watch stops on a change, the browser tab's title marks it (for example "1 new pull request") and the tab shows the pull request that arrived or left.
+The tab is gathered when the page is opened and when the chrome's Refresh is pressed, and it has two buttons of its own. Its Refresh gathers the open pull requests alone, by one search, which costs GitHub one point. Watch gathers them every 10 seconds and stops when the set of open pull requests changes (a pull request, by repository and number, appears or disappears), after 10 minutes, when the reader leaves the tab, or when the page is closed; moving to another browser tab or another application does not stop it. While it watches, the button says so, and pressing it again cancels the watch. A watch may instead be started from one pull request's row, to wait for that pull request: it then also stops when that pull request's status changes (for example from checks running to ready to merge), at the same cost of one point a gather. When the watch stops on a change, the browser tab's title marks it (for example "1 new pull request", or "#12 ready to merge") and the tab shows the pull request that arrived, left or changed.
 
 ## When the page gathers
 
@@ -116,7 +116,7 @@ A gather not complete within the wait shows the facts that did arrive, those who
 
 Data that could not be gathered is shown zeroed and greyed out. Zeroed means 0 for a count, "no" for a yes-or-no fact and an empty value for a version or a state, each in grey. A fact gathered and found empty, such as no release or no branch, reads "none" in ordinary type. (R7)
 
-The status bar states the health of the last gather in one sentence, such as "Gathered from GitHub at 14:03:12 in 3.1 s", with GitHub's rate limit remaining and when it resets, and the number of archived repositories not shown. When something went wrong, the sentence says what and why, and an information icon beside it opens a dialog with the detail of each problem.
+The status bar states the health of the last gather in one sentence, such as "Gathered from GitHub at 14:03:12 in 3.1 s", with GitHub's rate limit remaining and when it resets, the number of archived repositories not shown, and when the GitHub token expires, as GitHub's answers report it ("the GitHub token expires in 350 days"), in yellow within 30 days of its expiry. When something went wrong, the sentence says what and why, and an information icon beside it opens a dialog with the detail of each problem.
 
 ## Colour and shape
 

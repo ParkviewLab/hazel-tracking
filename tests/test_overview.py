@@ -142,6 +142,7 @@ def test_the_overview_has_a_row_per_repository_in_the_snapshot_s_order() -> None
         archived=0,
         problems=(),
         rate_limit=None,
+        credential_expires_at=None,
     )
     assert [row.name for row in overview(snapshot)] == [r.name for r in repos]
     assert overview(snapshot)[1].readiness is None

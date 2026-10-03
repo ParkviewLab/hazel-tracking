@@ -232,7 +232,9 @@ class Snapshot:
     not (R11); `archived` is how many archived repositories were left out, `None`
     where the list did not arrive. `problems` holds everything that could not be
     gathered; a gather is wholly successful when it completed and `problems` is
-    empty. `rate_limit` is `None` where no answer reported it.
+    empty. `rate_limit` is `None` where no answer reported it. `credential_expires_at`
+    is when the GitHub token expires as GitHub's answers report it (aware), `None`
+    where no answer reported an expiry.
     """
 
     began_at: datetime
@@ -243,6 +245,7 @@ class Snapshot:
     archived: int | None
     problems: tuple[Problem, ...]
     rate_limit: RateLimit | None
+    credential_expires_at: datetime | None
 
 
 @dataclass(frozen=True)

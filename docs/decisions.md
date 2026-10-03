@@ -205,5 +205,13 @@ Decided: opening the page and the chrome's Refresh run both gathers, the full ga
 
 Decided: on the overview, what waits on the reader is a release ready to cut, a pending back-merge, checks failing on either trunk, open pull requests that are ready to merge, in conflict, failing their checks or behind their base, and open issues. A repository with none of these is shown quietly, with its release state and its readiness; a fact not gathered counts as waiting. Reason: cutting a release needs the reader's ask and an incomplete back-merge needs attention, as the requirements of 2026-09-18 list them. Set aside: readiness shown apart from what waits.
 
+## 2026-10-03: the northstar's fourth intent, its sources, and an eighth axiom
+
+Decided: the northstar gains a fourth intent, "Safe to leave open" (every view read-only and private, serving the development network alone and showing no secret), from which axioms 6 and 7 follow; the overview's and the detail's intents are worded by source rather than by repository, so that a later phase extends them rather than rewriting them; an eighth axiom rules that one source's failure never hides another's. "Not a monitoring system" becomes "Not an alerting system", since the reader monitors the work with the page. Reason: the axioms on secrets and the network followed from none of the three intents, and the later phases add sources (services, development machines) that fail independently. Set aside: none recorded.
+
+## 2026-10-03: the token's expiry, and a watch on one pull request
+
+Decided: the status bar shows when the GitHub token expires, as GitHub's answers report it, in yellow within 30 days of its expiry; and a watch may be started from one pull request's row, stopping also when that pull request's status changes. Reason: an expired token would leave the whole page ungathered, and waiting for a pull request's checks is as common as waiting for a new pull request. Set aside: none recorded.
+
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>
