@@ -88,11 +88,15 @@ def nothing() -> str:
 
 
 def lines(parts: list[str]) -> str:
-    return "".join(f'<span class="line">{part}</span>' for part in parts)
+    """Several facts in one cell, a line each; the line feed between them is for a reader of the
+    markup, since each span is a block of its own."""
+    return "\n".join(f'<span class="line">{part}</span>' for part in parts)
 
 
 def chips(parts: list[str]) -> str:
-    return "".join(f'<span class="chip">{part}</span>' for part in parts)
+    """Several facts on one line, separated by a gap the stylesheet sets and by a space, so that
+    the cell's text reads as it looks."""
+    return " ".join(f'<span class="chip">{part}</span>' for part in parts)
 
 
 def repository_url(name: str) -> str:

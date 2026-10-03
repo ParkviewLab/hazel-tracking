@@ -244,15 +244,20 @@ class Dashboard:
         if self._snapshot is None:
             return
         self._overview.set_content(overview_view.render(self._snapshot))
-        self._detail.set_content(detail_view.render(self._snapshot, self._now()))
+        # The times in the table are reckoned from the gather, not from the clock: the facts are
+        # what the source said at the moment the chrome names (axiom 2).
+        self._detail.set_content(detail_view.render(self._snapshot, self._snapshot.began_at))
         self._show_status()
 
     def _show_status(self) -> None:
+        # The sentence describes the gather, so what it reckons (the token's expiry) is reckoned
+        # from the moment that gather began; the chrome alone says how long ago that was.
+        reckoned_from = self._snapshot.began_at if self._snapshot is not None else self._now()
         self._sentence.set_content(
             status_bar.sentence(
                 self._cfg,
                 self._snapshot,
-                self._now(),
+                reckoned_from,
                 self._schedule.next_at,
                 failed=self._failed,
             )
