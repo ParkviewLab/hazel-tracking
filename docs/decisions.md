@@ -197,5 +197,9 @@ Decided: the northstar is amended to three intents, one per tab (the overview, t
 
 Decided: each repository's name and each pull request's number link to it on GitHub, as prima-dev-dashboard links them, and the interactive elements are the Refresh button, the three tabs, the pull-requests tab's Refresh and Watch, the information icon, and those links. This amends the 2026-09-18 entry under which the page was not interactive except for the Refresh button and the information icon. The pull-requests tab carries the time of its own gather beside the chrome's age of the full gather. Reason: the columns were taken as prima-dev-dashboard has them, and the pull-requests tab is gathered on its own. Set aside: none recorded.
 
+## 2026-10-03: which gathers run, and the spinner
+
+Decided: opening the page and the chrome's Refresh run both gathers, the full gather and the gather of the open pull requests; switching tabs gathers nothing. The 30-minute cycle and its retries apply to the full gather alone, and the pull-requests tab's own Refresh and Watch leave that cycle alone. The spinner covers the page while it is opened, while Refresh runs and while the tab's own Refresh runs, and not during the Watch's gathers, whose button shows that it is watching. Reason: the pull-requests tab must hold its data before it is first shown, and a spinner every 10 seconds would cover the page for up to 10 minutes. Set aside: the pull-requests tab gathering when first selected.
+
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>
