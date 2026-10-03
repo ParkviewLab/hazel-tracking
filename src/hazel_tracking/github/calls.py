@@ -97,10 +97,6 @@ class Reply:
     data: Any = None
     failure: Failure | None = None
 
-    @property
-    def ok(self) -> bool:
-        return self.failure is None
-
 
 def redact(text: str | None, token: str | None) -> str | None:
     """`text` on one line, shortened to `MESSAGE_LIMIT`, with the token named in general terms

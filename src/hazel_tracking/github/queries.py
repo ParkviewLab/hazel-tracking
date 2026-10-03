@@ -92,7 +92,6 @@ REPOSITORIES = _document(
       pageInfo { hasNextPage endCursor }
       nodes {
         nameWithOwner
-        url
         isArchived
         pushedAt
         issues(states: OPEN) { totalCount }

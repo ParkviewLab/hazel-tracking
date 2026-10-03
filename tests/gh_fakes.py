@@ -286,7 +286,6 @@ class FakeGitHub:
         pulls, pulls_info = self._page(list(repository.pulls), None, variables.get("pulls"))
         return {
             "nameWithOwner": self._full_name(repository),
-            "url": self._address(repository),
             "isArchived": repository.archived,
             "pushedAt": repository.pushed_at,
             "issues": {"totalCount": repository.issues},
