@@ -181,3 +181,47 @@ async def test_the_tabs_own_refresh_does_not_stop_the_watch(user: User, page_pla
     gathered = page_plan.pull_request_gathers
     await until(lambda: page_plan.pull_request_gathers > gathered + 1)
     await user.should_see("Watching")
+
+
+async def test_a_tick_whose_gather_raised_is_shown_and_stops_nothing(user: User, page_plan: Plan) -> None:
+    await open_tab(user, page_plan, pull_requests=scenarios.watch_times_out())
+    user.find(marker="watch").click()
+    await until(lambda: page_plan.pull_request_gathers >= 2)
+    page_plan.pull_requests_raise = RuntimeError("the search was refused")
+    await until(lambda: "could not be gathered" in content_of(user, "status-sentence"))
+    await user.should_see(content="The open pull requests could not be gathered")
+    await user.should_see("Watching")
+    assert user.client.title == DISPLAY_NAME
+
+
+async def test_a_watch_begun_before_anything_was_gathered_takes_the_first_list(
+    user: User, page_plan: Plan
+) -> None:
+    await open_tab(user, page_plan, pull_requests=scenarios.watch_from_nothing_gathered())
+    await user.should_see(content="The open pull requests could not be gathered")
+    user.find(marker="watch").click()
+    await until(lambda: user.client.title != DISPLAY_NAME, timeout=2.0)
+    assert user.client.title == f"1 new pull request · {DISPLAY_NAME}"
+
+
+async def test_a_line_s_watch_can_be_stopped_and_started_again(user: User, page_plan: Plan) -> None:
+    await open_tab(user, page_plan, pull_requests=scenarios.watch_times_out())
+    row = f"watch-{HAZEL[0]}-{HAZEL[1]}"
+    user.find(marker=row).click()
+    await until(lambda: page_plan.pull_request_gathers >= 2)
+    user.find(marker=row).click()
+    gathered = page_plan.pull_request_gathers
+    await asyncio.sleep(0.15)
+    assert page_plan.pull_request_gathers == gathered
+    user.find(marker=row).click()
+    await until(lambda: page_plan.pull_request_gathers > gathered + 1)
+
+
+async def test_the_tabs_watch_takes_a_line_s_watch_to_the_whole_set(user: User, page_plan: Plan) -> None:
+    await open_tab(user, page_plan, pull_requests=scenarios.watch_sees_a_status_change())
+    user.find(marker=f"watch-{HAZEL[0]}-{HAZEL[1]}").click()
+    await until(lambda: page_plan.pull_request_gathers >= 2)
+    user.find(marker="watch").click()
+    await until(lambda: page_plan.pull_request_gathers >= 4)
+    await user.should_see("Watching")
+    assert user.client.title == DISPLAY_NAME, "the whole set passes over one status change"

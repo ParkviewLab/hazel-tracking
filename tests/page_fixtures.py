@@ -20,6 +20,7 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -254,3 +255,19 @@ async def open_page(
     )
     await user.open("/")
     await until(lambda: content_of(user, "overview") != "" and plan.pull_request_gathers >= 1)
+
+
+def dashboard_of(user: User) -> Any:
+    """The page's own object, reached through the handler its Refresh button holds.
+
+    NiceGUI wraps a click handler in a function of its own, so the bound method is in that
+    function's closure. One test needs to start two full gathers at once, which nothing a
+    browser can do will; everything else about the page is read as a browser sees it.
+    """
+    (button,) = user.find(marker="refresh").elements
+    for listener in button._event_listeners.values():
+        for cell in getattr(listener.handler, "__closure__", None) or ():
+            owner = getattr(cell.cell_contents, "__self__", None)
+            if hasattr(owner, "_full_gather"):
+                return owner
+    raise AssertionError("the Refresh button carries no handler bound to the page")

@@ -269,7 +269,7 @@ def checks_cell(repo: Repository) -> str:
             shown = nothing()
         else:
             shown = state(text.CHECK_STATE_STYLE[check.state.value], str(check.state.value))
-        parts.append(f"{span(escape(check.trunk), 'sub')} {shown}")
+        parts.append(f"{span(escape(trunk_name(check.trunk)), 'sub')} {shown}")
     return lines(parts)
 
 

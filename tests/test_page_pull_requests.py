@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import asyncio
 
+from nicegui import ui
 from nicegui.testing import User
 
+from hazel_tracking.ui import theme
 from tests import page_scenarios as scenarios
-from tests.page_fixtures import Plan, open_page, until
+from tests.page_fixtures import Plan, content_of, open_page, until
 
 
 async def open_tab(user: User, page_plan: Plan, **loaded: object) -> None:
@@ -89,3 +91,52 @@ async def test_closing_the_page_stops_the_watch(user: User, page_plan: Plan) -> 
     gathered = page_plan.pull_request_gathers
     await asyncio.sleep(0.2)
     assert page_plan.pull_request_gathers <= gathered + 1
+
+
+async def test_a_gather_that_raised_at_the_page_s_opening_is_shown_as_not_gathered(
+    user: User, page_plan: Plan
+) -> None:
+    page_plan.load(scenarios.live_like(), scenarios.open_pull_requests())
+    page_plan.pull_requests_raise = RuntimeError("the search was refused")
+    await user.open("/")
+    await until(lambda: page_plan.pull_request_gathers >= 1)
+    user.find("Pull requests").click()
+    await user.should_see(content="The open pull requests could not be gathered")
+    await user.should_see(marker="status-icon")
+
+
+async def test_a_gather_that_raised_at_its_refresh_is_shown_as_not_gathered(
+    user: User, page_plan: Plan
+) -> None:
+    await open_tab(user, page_plan)
+    page_plan.pull_requests_raise = RuntimeError("the search was refused")
+    user.find(marker="pull-requests-refresh").click()
+    await until(lambda: page_plan.pull_request_gathers == 2)
+    await user.should_see(content="The open pull requests could not be gathered")
+    user.find(marker="status-icon").click()
+    assert "the error was a RuntimeError" in content_of(user, "status-dialog")
+
+
+async def test_a_line_s_own_watch_carries_no_type_under_twelve_pixels(user: User, page_plan: Plan) -> None:
+    """Its size is set in the stylesheet, not by the button's own `size`, which would be 10 px."""
+    await open_tab(user, page_plan)
+    (button,) = user.find(marker="watch-ParkviewLab/hazel-tracking-2").elements
+    assert "size" not in button.props
+    assert ".prcell-watch .q-btn { font-size:12px;" in theme.stylesheet()
+
+
+async def test_the_links_are_not_sanitised_so_that_they_open_beside_the_dashboard(
+    user: User, page_plan: Plan
+) -> None:
+    """The sanitiser drops a link's target, and a pull request opened in place of the Dashboard
+    would end the watch the reader started; every value in the markup is escaped in `cells`."""
+    await open_tab(user, page_plan)
+    listed = [
+        element
+        for element in user.client.layout.descendants()
+        if isinstance(element, ui.html) and "prcell-title" in element.classes
+    ]
+    assert listed
+    for element in listed:
+        assert element.props["sanitize"] is False
+    assert [element for element in listed if 'target="_blank"' in element.content]

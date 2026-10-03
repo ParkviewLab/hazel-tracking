@@ -69,3 +69,15 @@ async def test_the_credential_is_named_in_general_terms_alone(user: User, page_p
     sentence = content_of(user, "status-sentence")
     assert "the GitHub token expires in" in sentence
     assert TOKEN_VARIABLE not in everything_shown(user)
+
+
+async def test_a_pull_request_gather_that_raised_with_the_token_shows_neither(
+    user: User, page_plan: Plan
+) -> None:
+    page_plan.load(scenarios.live_like(), scenarios.open_pull_requests())
+    page_plan.pull_requests_raise = RuntimeError(f"Bearer {SENTINEL_TOKEN} was refused")
+    await user.open("/")
+    await until(lambda: "could not be gathered" in content_of(user, "status-sentence"))
+    user.find(marker="status-icon").click()
+    assert SENTINEL_TOKEN not in everything_shown(user)
+    assert SENTINEL_TOKEN not in (await user.http_client.get("/")).text

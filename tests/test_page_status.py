@@ -111,9 +111,16 @@ async def test_a_gather_that_raised_says_the_gather_failed_and_shows_no_tracebac
     assert "Traceback" not in dialog
 
 
-async def test_the_pull_requests_own_problem_reaches_the_dialog(user: User, page_plan: Plan) -> None:
+async def test_the_pull_requests_own_problem_is_named_in_the_sentence_and_the_dialog(
+    user: User, page_plan: Plan
+) -> None:
+    """The icon opens every problem, so the sentence states every problem: one gather's trouble
+    is not hidden by the other's going well (axiom 8)."""
     await open_page(user, page_plan, scenarios.live_like(), scenarios.pull_requests_not_gathered())
     await user.should_see(marker="status-icon")
+    sentence = content_of(user, "status-sentence")
+    assert "Gathered from GitHub at 14:03:12" in sentence
+    assert "the open pull requests could not be read (GitHub refused the search)" in sentence
     user.find(marker="status-icon").click()
     assert "GitHub refused the search" in content_of(user, "status-dialog")
 

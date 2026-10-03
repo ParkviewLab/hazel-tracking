@@ -22,7 +22,7 @@ from nicegui.testing import User
 from hazel_tracking.config import DISPLAY_NAME, VERSION
 from hazel_tracking.ui import theme
 from tests import page_scenarios as scenarios
-from tests.page_fixtures import Plan, content_of, open_page, until
+from tests.page_fixtures import Plan, content_of, dashboard_of, open_page, until
 
 
 async def test_the_chrome_names_the_service_and_its_version(user: User, page_plan: Plan) -> None:
@@ -138,3 +138,33 @@ async def test_the_interactive_elements_are_only_those_the_page_names(user: User
     assert len(buttons) == len(marks) + 1, "the dialog's Close is the one button without a mark"
     tabs = [element for element in user.client.layout.descendants() if isinstance(element, ui.tab)]
     assert len(tabs) == 3
+
+
+async def test_a_page_closed_while_a_gather_runs_leaves_nothing_behind(user: User, page_plan: Plan) -> None:
+    """The browser goes while a Refresh's gather is still out; what returns is dropped, and
+    nothing is drawn for a client that is no longer there."""
+    await open_page(user, page_plan)
+    hold = page_plan.block()
+    user.find(marker="refresh").click()
+    await until(lambda: page_plan.full_gathers == 2)
+    user.client.delete()
+    hold.set()
+    await asyncio.sleep(0.2)
+    assert page_plan.full_gathers == 2
+
+
+async def test_an_overtaken_gather_does_not_overwrite_a_newer_one(user: User, page_plan: Plan) -> None:
+    """Two full gathers in flight at once: the older one's result is dropped when it returns, so
+    the page keeps the newer, and the retries do not advance a step for a result nobody saw."""
+    await open_page(user, page_plan)
+    dashboard = dashboard_of(user)
+    page_plan.load([scenarios.timed_out(), scenarios.live_like()])
+    hold = page_plan.block()
+    older = asyncio.create_task(dashboard._full_gather())
+    await until(lambda: page_plan.full_gathers == 2)
+    newer = asyncio.create_task(dashboard._full_gather())
+    await until(lambda: page_plan.full_gathers == 3)
+    hold.set()
+    await asyncio.gather(older, newer)
+    assert "Gathered from GitHub" in content_of(user, "status-sentence")
+    assert "did not answer" not in content_of(user, "status-sentence")

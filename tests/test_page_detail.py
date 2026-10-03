@@ -11,6 +11,8 @@ docs/what-it-shows.md, "The detail".
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from nicegui.testing import User
 
 from hazel_tracking.ui import detail_view
@@ -157,3 +159,21 @@ async def test_a_gather_without_the_list_shows_the_columns_and_no_rows(user: Use
     detail = sheet_of(user, "detail")
     assert detail.headers == list(detail_view.COLUMNS)
     assert detail.rows == {}
+
+
+async def test_a_repository_with_no_default_branch_shows_none_for_its_trunk(
+    user: User, page_plan: Plan
+) -> None:
+    nameless = scenarios.repository("ochre-milling", no_default_branch=True)
+    await open_page(user, page_plan, scenarios.snapshot([nameless]))
+    row = sheet_of(user, "detail").rows["ochre-milling"]
+    assert row[7].text == "none ● passing"
+    assert row[6].text == ""
+
+
+async def test_the_last_pushs_date_is_the_date_in_the_labs_zone(user: User, page_plan: Plan) -> None:
+    """A push at 23:30 UTC on 1 October is half past midnight on 2 October in the lab's zone."""
+    moment = datetime(2026, 10, 3, 20, 0, tzinfo=UTC)
+    late = scenarios.repository("handbook", moment=moment, pushed_minutes_ago=44.5 * 60)
+    await open_page(user, page_plan, scenarios.snapshot([late], moment=moment))
+    assert sheet_of(user, "detail").rows["handbook"][1].text == "2 Oct 2026"
