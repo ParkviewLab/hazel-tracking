@@ -15,7 +15,12 @@ attention.
 
 A gather of its own that could not read the pull requests stops nothing and
 compares nothing: an unanswered search is not a pull request disappearing (R7,
-axiom 8).
+axiom 8). A watch begun before any list had been gathered takes the first
+gathered list as its baseline, so that it still stops on the next change.
+
+The gather it is given must not raise: the page gives it one that reads a
+failure as a gather that did not complete, so that the tab shows what went wrong
+as its own Refresh would.
 
 The comparison and the words it yields are pure functions of two snapshots, so
 every stopping rule can be read in a test without a clock.
@@ -24,7 +29,7 @@ every stopping rule can be read in a test without a clock.
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -131,15 +136,16 @@ class Watch:
         *,
         on_gather: Callable[[PullRequestsSnapshot], None],
         on_stop: Callable[[Stop], None],
-        on_error: Callable[[Exception], Awaitable[None] | None] | None = None,
     ) -> None:
         self._cfg = cfg
         self._gather = gather_pull_requests
         self._parent = parent
         self._on_gather = on_gather
         self._on_stop = on_stop
-        self._on_error = on_error
         self._timer: ui.timer | None = None
+        # Which watch a tick belongs to: a tick already in flight when the watch was cancelled or
+        # started afresh has nothing to say about the watch that follows it.
+        self._generation = 0
         self._baseline: PullRequestsSnapshot | None = None
         self._target: Key | None = None
         self._deadline = 0.0
@@ -156,6 +162,7 @@ class Watch:
     def start(self, baseline: PullRequestsSnapshot, target: Key | None = None) -> None:
         """Begin watching, comparing every gather against `baseline`."""
         self.cancel(quietly=True)
+        self._generation += 1
         self._baseline = baseline
         self._target = target
         self._deadline = time.monotonic() + self._cfg.watch_limit_seconds
@@ -170,6 +177,7 @@ class Watch:
             self._on_stop(Stop(reason))
 
     def _halt(self) -> None:
+        self._generation += 1
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
@@ -183,20 +191,19 @@ class Watch:
             self._halt()
             self._on_stop(Stop(StopReason.LIMIT))
             return
-        try:
-            snapshot = await self._gather()
-        # A gather that raised stops nothing and compares nothing; the page reports it.
-        except Exception as error:
-            if self._on_error is not None:
-                result = self._on_error(error)
-                if result is not None:
-                    await result
-            return
-        if not self.watching:
+        mine = self._generation
+        snapshot = await self._gather()
+        if mine != self._generation or not self.watching:
             return
         self._on_gather(snapshot)
         baseline = self._baseline
         if baseline is None:
+            return
+        if keys(baseline) is None:
+            # Nothing was gathered when the watch began; the first list that arrives is what the
+            # watch compares against from here.
+            if keys(snapshot) is not None:
+                self._baseline = snapshot
             return
         stop = set_change(baseline, snapshot)
         if stop is None and self._target is not None:

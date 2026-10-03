@@ -16,13 +16,18 @@ from __future__ import annotations
 
 import html
 from datetime import datetime
+from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from hazel_tracking.model import (
     CheckState,
+    Fact,
     Gathered,
     PullRequest,
+    Readiness,
     ReleaseCondition,
     Repository,
+    Unreleased,
     WorkingBranch,
 )
 from hazel_tracking.ui import text
@@ -43,6 +48,24 @@ CONDITION_ORDER = (
 
 READY_TO_CUT = "ready to cut a release"
 DOCUMENTATION_NOTE = "documentation"
+
+
+class HasReadiness(Protocol):
+    """What the readiness indicator reads: a repository carries these three facts, and so does
+    an overview's row, so one function serves the detail and the overview alike.
+
+    They are declared as properties because what satisfies the protocol is a frozen dataclass,
+    whose fields are read and never written.
+    """
+
+    @property
+    def unreleased(self) -> Unreleased | None: ...
+
+    @property
+    def readiness(self) -> Fact[Readiness] | None: ...
+
+    @property
+    def back_merge_pending(self) -> Fact[bool] | None: ...
 
 
 def escape(value: str) -> str:
@@ -103,24 +126,30 @@ def repository_url(name: str) -> str:
     return f"{GITHUB_URL}/{name}"
 
 
+def trunk_name(name: str) -> str:
+    """A trunk's name, or "none" where the repository has no default branch to take one from."""
+    return name.strip() if name.strip() else nothing()
+
+
 def short_name(name: str) -> str:
     """ "ParkviewLab/handbook" reads as "handbook"; the full name is the link's title."""
     return name.split("/", 1)[1] if "/" in name else name
 
 
-def repository_cell(repo: Repository) -> str:
+def repository_cell(name: str) -> str:
+    """The repository's name, linked to it on GitHub; the full `owner/name` is the link's title."""
     return (
-        f'<a class="plain" href="{escape(repository_url(repo.name))}" target="_blank" '
-        f'rel="noopener" title="{escape(repo.name)}">{escape(short_name(repo.name))}</a>'
+        f'<a class="plain" href="{escape(repository_url(name))}" target="_blank" '
+        f'rel="noopener" title="{escape(name)}">{escape(short_name(name))}</a>'
     )
 
 
-def last_push_cell(repo: Repository, now: datetime) -> str:
+def last_push_cell(repo: Repository, now: datetime, zone: ZoneInfo) -> str:
     if not isinstance(repo.last_push, Gathered):
         return ungathered_value()
     if repo.last_push.value is None:
         return nothing()
-    return escape(text.since(repo.last_push.value, now))
+    return escape(text.since(repo.last_push.value, now, zone))
 
 
 def issues_cell(repo: Repository) -> str:
@@ -174,7 +203,7 @@ def unreleased_cell(repo: Repository) -> str:
     return shown + documentation_note(repo)
 
 
-def documentation_note(repo: Repository, lead: str = " · ") -> str:
+def documentation_note(repo: HasReadiness, lead: str = " · ") -> str:
     """The documentation mark, where any unreleased pull request changes it, greyed where unknown (R5).
 
     `lead` is what separates the mark from what it follows: a middle dot beside the count in
@@ -190,7 +219,7 @@ def documentation_note(repo: Repository, lead: str = " · ") -> str:
     return lead + span(DOCUMENTATION_NOTE, "sub")
 
 
-def readiness_cell(repo: Repository, *, with_count: bool = False) -> str:
+def readiness_cell(repo: HasReadiness, *, with_count: bool = False) -> str:
     """Ready to cut a release, or every condition that fails; a pending back-merge for a
     website repository; nothing where the default branch is the only trunk (R6).
 
@@ -216,7 +245,7 @@ def readiness_cell(repo: Repository, *, with_count: bool = False) -> str:
     return ""
 
 
-def unreleased_note(repo: Repository) -> str:
+def unreleased_note(repo: HasReadiness) -> str:
     """ " (3 pull requests, documentation)", for the overview's readiness indicator."""
     if repo.unreleased is None:
         return ""

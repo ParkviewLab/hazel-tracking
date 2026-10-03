@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import html
+from functools import cache
 from importlib import resources
 
 # The brand's own values (the handbook's docs/brand.md).
@@ -49,8 +50,13 @@ _BRAND = resources.files("hazel_tracking.ui").joinpath("brand")
 _GOOGLE_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Michroma&amp;display=swap');"
 
 
+@cache
 def _michroma_face() -> str:
-    """The `@font-face` for Michroma with the vendored file embedded, so nothing is fetched."""
+    """The `@font-face` for Michroma with the vendored file embedded, so nothing is fetched.
+
+    Read and encoded once for the life of the process: it is the same 11 kB for every browser,
+    and the page puts it both in its own head and inside the mark's own markup.
+    """
     font = base64.b64encode(_BRAND.joinpath("fonts", "michroma-latin.woff2").read_bytes()).decode("ascii")
     return (
         "@font-face{font-family:'Michroma';font-style:normal;font-weight:400;"
@@ -158,11 +164,21 @@ td.repo a:hover, a.plain:hover {{ text-decoration:underline; }}
 .prcell-title {{ flex:1 1 auto; min-width:0; white-space:normal; }}
 .prcell-status {{ flex:0 0 160px; }}
 .prcell-watch {{ flex:0 0 100px; text-align:right; }}
+/* A line's own Watch is small, but no type on the page goes under 12 px, so its size is set
+   here rather than taken from the button's own `size` property. */
+.prcell-watch .q-btn {{ font-size:12px; min-height:22px; padding:0 8px; }}
 
 .wrap {{ white-space:normal; }}
 .tabbar {{ border-bottom:1px solid var(--line); }}
 .chrome {{ background:var(--teal-deep); }}
-.busy {{ background:rgba(15,35,40,.72); }}
+
+/* Every gather shows a spinner over a scrim: a translucent dimming of what lies beneath, which
+   is not the grey that marks data not gathered. The scrim of the pull-requests tab's frame takes
+   no pointer, so the tab's own controls stay within reach while the watch gathers. */
+.busy {{ background:rgba(15,35,40,.55); }}
+.scrim {{ pointer-events:none; }}
+.q-tab-panel.framed {{ position:relative; overflow:hidden; }}
+.framed-scroll {{ height:100%; overflow:auto; }}
 """
 
 

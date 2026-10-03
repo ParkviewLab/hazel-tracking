@@ -112,7 +112,9 @@ def branch(name: str, repository: str, behind: int | None = 0, number: int | Non
     return WorkingBranch(name=name, behind=behind_fact, pull_request=Gathered(reference))
 
 
-def trunks_of(name: str, *, lone_trunk: bool = False) -> Trunks:
+def trunks_of(name: str, *, lone_trunk: bool = False, no_default_branch: bool = False) -> Trunks:
+    if no_default_branch:
+        return Trunks(integration="", release=None)
     if lone_trunk:
         return Trunks(integration="main", release=None)
     if name in WEBSITES:
@@ -170,6 +172,7 @@ def repository(
     branches: Sequence[WorkingBranch] = (),
     pull_requests: Sequence[PullRequest] | None = (),
     lone_trunk: bool = False,
+    no_default_branch: bool = False,
     ungathered_versions: bool = False,
     ungathered_branches: bool = False,
     ungathered_dev: bool = False,
@@ -180,7 +183,7 @@ def repository(
     `failing` left out derives the conditions that fail from the facts themselves, so that a
     scenario cannot read "ready to cut a release" with nothing to release (R6).
     """
-    trunks = trunks_of(name, lone_trunk=lone_trunk)
+    trunks = trunks_of(name, lone_trunk=lone_trunk, no_default_branch=no_default_branch)
     last_push: Fact[datetime | None] = (
         NOT_GATHERED
         if pushed_minutes_ago is None
@@ -627,6 +630,16 @@ def watch_sees_a_status_change(moment: datetime = MOMENT) -> list[PullRequestsSn
     return [
         pull_requests_snapshot(OPEN, moment=moment),
         pull_requests_snapshot(changed, moment=moment + timedelta(seconds=10)),
+    ]
+
+
+def watch_from_nothing_gathered(moment: datetime = MOMENT) -> list[PullRequestsSnapshot]:
+    """The search had not answered when the watch began: it takes the first list that arrives as
+    its baseline, and stops on the change after that."""
+    return [
+        pull_requests_not_gathered(moment),
+        pull_requests_snapshot(OPEN, moment=moment + timedelta(seconds=10)),
+        pull_requests_snapshot([*OPEN, ARRIVED], moment=moment + timedelta(seconds=20)),
     ]
 
 

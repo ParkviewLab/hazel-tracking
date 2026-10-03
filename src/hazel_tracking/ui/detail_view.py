@@ -18,6 +18,7 @@ the window; the rest stand on one line.
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from hazel_tracking.model import Repository, Snapshot
 from hazel_tracking.ui import cells
@@ -36,11 +37,11 @@ COLUMNS = (
 )
 
 
-def row(repo: Repository, now: datetime) -> str:
+def row(repo: Repository, now: datetime, zone: ZoneInfo) -> str:
     return (
         "<tr>"
-        f'<td class="repo">{cells.repository_cell(repo)}</td>'
-        f"<td>{cells.last_push_cell(repo, now)}</td>"
+        f'<td class="repo">{cells.repository_cell(repo.name)}</td>'
+        f"<td>{cells.last_push_cell(repo, now, zone)}</td>"
         f"<td>{cells.issues_cell(repo)}</td>"
         f"<td>{cells.tag_release_cell(repo)}</td>"
         f"<td>{cells.dev_cell(repo)}</td>"
@@ -53,8 +54,8 @@ def row(repo: Repository, now: datetime) -> str:
     )
 
 
-def render(snapshot: Snapshot, now: datetime) -> str:
+def render(snapshot: Snapshot, now: datetime, zone: ZoneInfo) -> str:
     """The whole table. With no repository gathered it is the columns and no rows (R11)."""
     head = "".join(f"<th>{cells.escape(name)}</th>" for name in COLUMNS)
-    body = "".join(row(repo, now) for repo in sorted(snapshot.repositories, key=lambda r: r.name))
+    body = "".join(row(repo, now, zone) for repo in sorted(snapshot.repositories, key=lambda r: r.name))
     return f'<table class="sheet"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'

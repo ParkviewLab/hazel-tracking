@@ -75,10 +75,11 @@ def duration(seconds: float) -> str:
     return f"{seconds:.1f} s"
 
 
-def since(moment: datetime, now: datetime) -> str:
+def since(moment: datetime, now: datetime, zone: ZoneInfo) -> str:
     """The time since the last push, up to 36 hours, and the date after that.
 
-    "6 min ago", "34 h ago", "30 Sep 2026" (docs/what-it-shows.md, "Last push").
+    "6 min ago", "34 h ago", "30 Sep 2026" (docs/what-it-shows.md, "Last push"). The date is
+    the date in the lab's zone, since a moment late in the day is a different date elsewhere.
     """
     seconds = (now - moment).total_seconds()
     if seconds < 0:
@@ -89,7 +90,7 @@ def since(moment: datetime, now: datetime) -> str:
         return f"{int(seconds // 60)} min ago"
     if seconds < RELATIVE_LIMIT_HOURS * 3600:
         return f"{int(seconds // 3600)} h ago"
-    return moment.strftime("%-d %b %Y")
+    return moment.astimezone(zone).strftime("%-d %b %Y")
 
 
 def age(seconds: float) -> str:

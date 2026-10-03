@@ -13,6 +13,11 @@ carries a button; the detail and the overview, which carry none, are markup. The
 list is rebuilt in place on every gather, the watch's included, and the lines are
 flex rows rather than a table so that an element and a fragment of markup can
 stand side by side in one line.
+
+Every fragment is put on the page unsanitised, every value in it having been
+escaped in `cells`, because the sanitiser drops the `target` of a link: with it,
+following a pull request would replace the Dashboard in the browser rather than
+opening beside it, and would end a watch.
 """
 
 from __future__ import annotations
@@ -67,7 +72,9 @@ class PullRequestsList:
                 ui.label(GATHERING).classes("sub").style("padding:8px 10px")
                 return
             if not isinstance(snapshot.pull_requests, Gathered):
-                ui.html(cells.ungathered(NOT_GATHERED)).style("padding:8px 10px").mark("pull-requests-empty")
+                ui.html(cells.ungathered(NOT_GATHERED), sanitize=False).style("padding:8px 10px").mark(
+                    "pull-requests-empty"
+                )
                 return
             if not snapshot.pull_requests.value:
                 ui.label(NONE_OPEN).classes("sub").style("padding:8px 10px").mark("pull-requests-empty")
@@ -79,16 +86,18 @@ class PullRequestsList:
     def _header(self) -> None:
         with ui.element("div").classes("prhead"):
             for name, column in COLUMNS:
-                ui.html(cells.escape(name)).classes(f"prcell-{column}")
+                ui.html(cells.escape(name), sanitize=False).classes(f"prcell-{column}")
 
     def _row(self, open_pull_request: OpenPullRequest, watching: Key | None) -> None:
         key = key_of(open_pull_request)
         with ui.element("div").classes("prrow"):
-            ui.html(cells.escape(cells.short_name(open_pull_request.repository))).classes("prcell-repo sub")
-            ui.html(title_html(open_pull_request)).classes("prcell-title")
-            ui.html(status_html(open_pull_request)).classes("prcell-status")
+            ui.html(cells.escape(cells.short_name(open_pull_request.repository)), sanitize=False).classes(
+                "prcell-repo sub"
+            )
+            ui.html(title_html(open_pull_request), sanitize=False).classes("prcell-title")
+            ui.html(status_html(open_pull_request), sanitize=False).classes("prcell-status")
             with ui.element("div").classes("prcell-watch"):
                 ui.button(
                     WATCHING if watching == key else WATCH,
                     on_click=lambda _=None, chosen=key: self._on_watch(chosen),
-                ).props("flat dense no-caps size=sm color=accent").mark(f"watch-{key[0]}-{key[1]}")
+                ).props("flat dense no-caps color=accent").mark(f"watch-{key[0]}-{key[1]}")

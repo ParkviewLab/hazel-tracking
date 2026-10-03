@@ -75,16 +75,19 @@ def sentence(
     next_gather_at: datetime | None = None,
     *,
     failed: bool = False,
+    also: tuple[Problem, ...] = (),
 ) -> str:
     """The whole sentence, as markup; `None` while the first gather is still running.
 
     `failed` says that the gathering raised before it finished, which the page reads as a
-    gather that did not complete and names as a failure rather than as a wait run out.
+    gather that did not complete and names as a failure rather than as a wait run out. `also`
+    holds the problems of the other gather, the open pull requests' own, which the sentence
+    names beside the full gather's: the icon opens them all, so the sentence states them all.
     """
     if snapshot is None:
         return GATHERING
     parts = [health(cfg, snapshot, failed=failed)]
-    trouble = problems_phrase(snapshot.problems)
+    trouble = problems_phrase(snapshot.problems + also)
     if trouble:
         parts.append(cells.span(trouble, "red"))
     if next_gather_at is not None and not wholly_successful(snapshot):

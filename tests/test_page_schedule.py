@@ -14,6 +14,7 @@ are short.
 from __future__ import annotations
 
 import asyncio
+import time
 
 from nicegui.testing import User
 
@@ -81,12 +82,38 @@ async def test_refresh_cancels_the_pending_gather_and_sets_it_afresh(user: User,
     assert page_plan.full_gathers == 2, "the gather set before the Refresh should have been cancelled"
 
 
-async def test_the_automatic_gather_runs_the_full_gather_alone_and_shows_no_spinner(
+async def test_the_automatic_gather_runs_the_full_gather_alone_under_the_large_spinner(
     user: User, page_plan: Plan
 ) -> None:
     await open_page(user, page_plan, scenarios.timed_out())
+    await user.should_not_see(marker="spinner")
     hold = page_plan.block()
     await until(lambda: page_plan.full_gathers == 2, timeout=1.5)
-    await user.should_not_see(marker="spinner")
+    await user.should_see(marker="spinner")
+    await user.should_not_see(marker="tab-spinner")
     assert page_plan.pull_request_gathers == 1
     hold.set()
+    await user.should_not_see(marker="spinner")
+
+
+async def test_refresh_is_disabled_while_the_automatic_gather_runs(user: User, page_plan: Plan) -> None:
+    await open_page(user, page_plan, scenarios.timed_out())
+    hold = page_plan.block()
+    await until(lambda: page_plan.full_gathers == 2, timeout=1.5)
+    (button,) = user.find(marker="refresh").elements
+    assert not button.enabled
+    user.find(marker="refresh").click()
+    await asyncio.sleep(0.1)
+    assert page_plan.full_gathers == 2, "a disabled Refresh starts no second full gather"
+    hold.set()
+    await until(lambda: button.enabled)
+
+
+async def test_the_next_gather_is_measured_from_when_the_last_one_began(user: User, page_plan: Plan) -> None:
+    """The first retry falls due 0.2 s after the gather began, not 0.2 s after it returned, so a
+    gather of 0.3 s is followed at once rather than half a second later."""
+    page_plan.delay = 0.3
+    began = time.monotonic()
+    await open_page(user, page_plan, scenarios.timed_out())
+    await until(lambda: page_plan.full_gathers == 2, timeout=2.0)
+    assert 0.25 < time.monotonic() - began < 0.45

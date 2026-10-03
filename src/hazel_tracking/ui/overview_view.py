@@ -59,7 +59,7 @@ def waiting_cell(row: OverviewRow) -> str:
     parts: list[str] = []
     if isinstance(row.failing_trunks, Gathered):
         if row.failing_trunks.value:
-            trunks = ", ".join(row.failing_trunks.value)
+            trunks = ", ".join(cells.trunk_name(trunk) for trunk in row.failing_trunks.value)
             parts.append(cells.state(text.BAD, f"checks failing on {trunks}"))
     else:
         parts.append(cells.ungathered(f"checks {text.ZEROED_VALUE}"))
@@ -77,28 +77,23 @@ def waiting_cell(row: OverviewRow) -> str:
     return cells.chips(parts)
 
 
-def line(row: OverviewRow, readiness: str) -> str:
+def line(row: OverviewRow) -> str:
+    """One repository's line; the readiness indicator is read from the row itself, which carries
+    the same three facts the detail's Release column reads."""
     quiet = "" if row.waiting else ' class="quiet"'
-    name = cells.repository_url(row.name)
-    repository = (
-        f'<a class="plain" href="{cells.escape(name)}" target="_blank" rel="noopener" '
-        f'title="{cells.escape(row.name)}">{cells.escape(cells.short_name(row.name))}</a>'
-    )
     return (
         f"<tr{quiet}>"
-        f'<td class="repo">{repository}</td>'
+        f'<td class="repo">{cells.repository_cell(row.name)}</td>'
         f"<td>{release_state_cell(row)}</td>"
-        f"<td>{readiness}</td>"
+        f"<td>{cells.readiness_cell(row, with_count=True)}</td>"
         f"<td>{waiting_cell(row)}</td>"
         "</tr>"
     )
 
 
 def render(snapshot: Snapshot) -> str:
-    """The overview's table, its rows distilled by `overview.overview` and its readiness
-    indicator read from the repository itself, with the count the overview needs."""
-    repositories = {repo.name: repo for repo in snapshot.repositories}
+    """The overview's table, its rows distilled by `overview.overview`."""
     rows = sorted(overview(snapshot), key=lambda r: r.name)
     head = "".join(f"<th>{cells.escape(name)}</th>" for name in COLUMNS)
-    body = "".join(line(row, cells.readiness_cell(repositories[row.name], with_count=True)) for row in rows)
+    body = "".join(line(row) for row in rows)
     return f'<table class="sheet compact"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'

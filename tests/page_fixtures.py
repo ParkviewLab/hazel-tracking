@@ -68,6 +68,8 @@ class Plan:
     pull_requests_raise: Exception | None = None
     hold: asyncio.Event | None = None
     hold_pull_requests: asyncio.Event | None = None
+    # How long each gather takes, for a test that measures when the next one falls due.
+    delay: float = 0.0
 
     def reset(self) -> None:
         self.snapshots = []
@@ -78,6 +80,7 @@ class Plan:
         self.pull_requests_raise = None
         self.hold = None
         self.hold_pull_requests = None
+        self.delay = 0.0
 
     def block(self) -> asyncio.Event:
         """Hold the full gather until the event is set, so that a test can see the page before
@@ -106,6 +109,8 @@ class Plan:
 
     async def gather(self) -> Snapshot:
         self.full_gathers += 1
+        if self.delay:
+            await asyncio.sleep(self.delay)
         if self.hold is not None:
             await self.hold.wait()
         if self.full_raises is not None:

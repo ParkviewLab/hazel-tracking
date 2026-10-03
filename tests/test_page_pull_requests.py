@@ -64,14 +64,21 @@ async def test_every_line_carries_a_watch_of_its_own(user: User, page_plan: Plan
     user.find(marker="watch-ParkviewLab/hazel-tracking-2")
 
 
-async def test_its_refresh_covers_the_page_with_the_busy_spinner(user: User, page_plan: Plan) -> None:
+async def test_its_refresh_fills_the_tabs_frame_with_a_spinner_and_leaves_the_chrome(
+    user: User, page_plan: Plan
+) -> None:
     await open_tab(user, page_plan)
     hold = page_plan.block_pull_requests()
     user.find(marker="pull-requests-refresh").click()
     await until(lambda: page_plan.pull_request_gathers == 2)
-    await user.should_see(marker="spinner")
-    hold.set()
+    await user.should_see(marker="tab-spinner")
     await user.should_not_see(marker="spinner")
+    (refresh,) = user.find(marker="refresh").elements
+    assert refresh.enabled, "the chrome stays usable while the open pull requests are gathered"
+    user.find("Overview").click()
+    assert user.find(marker="overview")
+    hold.set()
+    await user.should_not_see(marker="tab-spinner")
 
 
 async def test_closing_the_page_stops_the_watch(user: User, page_plan: Plan) -> None:
