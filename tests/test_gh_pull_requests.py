@@ -9,6 +9,8 @@ Dependabot's kept, each with its R4 status, in the order of their repositories a
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import httpx
 
 from hazel_tracking.app import default_http_client
@@ -163,3 +165,22 @@ async def test_a_pull_request_in_an_archived_repository_is_not_listed(gh_config:
     async with default_http_client(gh_config, transport=fake.transport()) as client:
         snapshot = await gather_pull_requests(gh_config, client)
     assert snapshot.pull_requests == Gathered(())
+
+
+async def test_a_gather_cut_short_after_the_search_keeps_the_list_it_answered(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    """The search answered and the second read of the uncomputed statuses did not: the list stands,
+    marked incomplete, with those statuses greyed (R11)."""
+    fake = FakeGitHub(organisation=gh_organisation, delays={queries.STATUSES_OPERATION: 0.5})
+    cfg = replace(gh_config, wait_seconds=0.05)
+    async with default_http_client(cfg, transport=fake.transport()) as client:
+        snapshot = await gather_pull_requests(cfg, client)
+    assert not snapshot.completed
+    assert (f"{ORGANISATION}/quarry", 11) in listed(snapshot.pull_requests)
+    assert isinstance(snapshot.pull_requests, Gathered)
+    statuses = {one.pull_request.number: one.pull_request.status for one in snapshot.pull_requests.value}
+    assert statuses[11] == NOT_GATHERED
+    assert statuses[9] == Gathered(PullRequestStatus.READY)
+    problem = gh_problem(snapshot.problems, "the facts GitHub had not yet given")
+    assert any("status" in detail.call for detail in problem.details)

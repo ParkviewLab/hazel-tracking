@@ -72,12 +72,13 @@ async def gather_pull_requests(cfg: Config, client: httpx.AsyncClient) -> PullRe
     found = list(state.problems)
     if not completed:
         found.append(problems.timed_out(cfg.wait_seconds, reader.outstanding))
-    gathered = state.pull_requests is not None and completed
     return PullRequestsSnapshot(
         began_at=began_at,
         duration_seconds=duration,
         completed=completed,
-        pull_requests=Gathered(state.to_model()) if gathered else NOT_GATHERED,
+        # The list the search answered stands even where the gather was cut short afterwards: R11
+        # shows the facts that did arrive, and what did not is greyed beside them.
+        pull_requests=NOT_GATHERED if state.pull_requests is None else Gathered(state.to_model()),
         problems=tuple(found),
         rate_limit=reader.rate_limit,
     )
