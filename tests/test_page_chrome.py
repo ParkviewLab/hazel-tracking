@@ -44,8 +44,10 @@ async def test_the_face_and_the_mark_are_embedded_and_never_fetched(user: User, 
 async def test_the_stylesheet_keeps_no_type_under_twelve_pixels(user: User, page_plan: Plan) -> None:
     await open_page(user, page_plan)
     sizes = [int(size) for size in re.findall(r"font-size:(\d+)px", theme.stylesheet())]
+    sizes += [int(size) for size in re.findall(r"font-size:(\d+)px", content_of(user, "chrome-name"))]
     assert sizes
     assert min(sizes) >= theme.MINIMUM_TYPE_PX
+    assert theme.MINIMUM_TYPE_PX == 12
 
 
 async def test_the_age_advances_each_second(user: User, page_plan: Plan) -> None:

@@ -120,6 +120,10 @@ table.sheet th {{ position:sticky; top:0; z-index:1; background:var(--bg);
   color:var(--muted); padding:5px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }}
 table.sheet td {{ padding:4px 10px; border-bottom:1px solid var(--line);
   vertical-align:top; white-space:nowrap; }}
+/* The overview holds a line per repository within one screen, so its lines are tighter; the
+   type is the same size, since nothing on the page goes under 12 px. */
+table.sheet.compact td {{ padding:3px 10px; }}
+table.sheet.compact th {{ padding:4px 10px; }}
 table.sheet tr.quiet td {{ color:var(--muted); }}
 table.sheet tr.quiet td.repo a {{ color:var(--muted); }}
 td.repo a, a.plain {{ color:var(--text); text-decoration:none; font-weight:600; }}

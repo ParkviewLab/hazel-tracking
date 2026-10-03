@@ -171,3 +171,13 @@ async def test_a_watch_whose_gather_fails_stops_nothing(user: User, page_plan: P
     page_plan.load(pull_requests=scenarios.pull_requests_not_gathered())
     await asyncio.sleep(0.15)
     assert user.client.title == DISPLAY_NAME
+
+
+async def test_the_tabs_own_refresh_does_not_stop_the_watch(user: User, page_plan: Plan) -> None:
+    await open_tab(user, page_plan, pull_requests=scenarios.watch_times_out())
+    user.find(marker="watch").click()
+    await until(lambda: page_plan.pull_request_gathers >= 2)
+    user.find(marker="pull-requests-refresh").click()
+    gathered = page_plan.pull_request_gathers
+    await until(lambda: page_plan.pull_request_gathers > gathered + 1)
+    await user.should_see("Watching")

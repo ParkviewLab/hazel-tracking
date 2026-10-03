@@ -116,7 +116,6 @@ class Dashboard:
         self._pull_requests: PullRequestsSnapshot | None = None
         self._failed = False
         self._busy = 0
-        self._stop: Stop | None = None
 
     # The page, drawn before anything is gathered.
 
@@ -309,7 +308,7 @@ class Dashboard:
             self._failed = True
         self._snapshot = snapshot
         self._schedule.set_after(
-            wholly_successful=status_bar.wholly_successful(snapshot) and not self._failed,
+            wholly_successful=status_bar.wholly_successful(snapshot),
             elapsed_seconds=time.monotonic() - started,
         )
         self._show_snapshot()
@@ -341,13 +340,14 @@ class Dashboard:
         await self._both()
 
     async def _automatic_gather(self) -> None:
-        """The 30-minute cycle's own gather: the full gather alone, and no spinner (D's ruling
-        names the page's opening, Refresh and the tab's Refresh, and no other occasion)."""
+        """The cycle's own gather: the full gather alone, and no spinner, the ruling on the
+        spinner naming the page's opening, Refresh and the tab's Refresh and no other occasion."""
         await self._full_gather()
 
     async def _refreshed_pull_requests(self) -> None:
-        self._watch.cancel(quietly=True)
-        self._show_watch()
+        """The tab's own Refresh gathers the open pull requests alone. It does not stop a watch,
+        which stops only by the rules that govern it; the watch keeps comparing against the set
+        it was started on."""
         self._set_busy(True)
         try:
             await self._pull_requests_gather()
@@ -377,7 +377,6 @@ class Dashboard:
         self._show_watch()
 
     def _watch_stopped(self, stop: Stop) -> None:
-        self._stop = stop
         if stop.on_a_change and stop.title_mark:
             ui.page_title(f"{stop.title_mark} · {DISPLAY_NAME}")
         shown = stop.detail if stop.on_a_change else str(stop.reason)

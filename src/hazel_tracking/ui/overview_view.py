@@ -101,4 +101,4 @@ def render(snapshot: Snapshot) -> str:
     rows = sorted(overview(snapshot), key=lambda r: r.name)
     head = "".join(f"<th>{cells.escape(name)}</th>" for name in COLUMNS)
     body = "".join(line(row, cells.readiness_cell(repositories[row.name], with_count=True)) for row in rows)
-    return f'<table class="sheet"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
+    return f'<table class="sheet compact"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
