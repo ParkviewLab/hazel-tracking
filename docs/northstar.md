@@ -8,7 +8,7 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 
 ## What it is
 
-The ParkviewLab Engineering Dashboard: one page, served on the development server, showing the present state of every ParkviewLab repository, and in later phases the lab's services and development machines.
+The ParkviewLab Engineering Dashboard: a page, served on the development server, showing the present state of every ParkviewLab repository, with a second page of their open pull requests alone, and in later phases the lab's services and development machines.
 
 ## Why it exists
 
@@ -16,13 +16,13 @@ To let one person see, in a single browser window and without searching, what is
 
 ## Intents
 
-1. Everything at once. Every project, and in time every service and machine, on one screen, with no scrolling and nothing to click through.
+1. Everything at once. Every project, and in time every service and machine, on one page as wide as one window, with nothing to click through to see a repository's state.
 2. True as of now. The page is gathered from its sources when it is requested and held nowhere, so what it shows is what the sources say at that moment, and what could not be gathered is shown as such.
 3. Private and read-only. It serves the development network alone, reads its sources without ever writing to them, and shows no secret.
 
 ### How the intents reinforce each other
 
-Gathering on request is what lets the Dashboard hold no data, so that it has nothing to protect beyond its credentials; and showing only the present, with no history, is what keeps everything to one screen.
+Gathering on request is what lets the Dashboard hold no data, so that it has nothing to protect beyond its credentials; and showing only the present, with no history, is what keeps everything to one page.
 
 ## Axioms
 
@@ -30,7 +30,7 @@ Gathering on request is what lets the Dashboard hold no data, so that it has not
 2. Store nothing: no database, no cache, no history.
 3. Never write to a source.
 4. Show what is unknown: data that could not be gathered is greyed out, and the status bar says why.
-5. One window: a page that does not fit is a defect.
+5. One window wide: a page wider than the window is a defect; it grows in height only as the repositories grow in number.
 6. No secret on the page, anywhere.
 
 ## What hazel-tracking is not
