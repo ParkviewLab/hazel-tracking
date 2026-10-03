@@ -19,15 +19,13 @@ computed is read once more, as R4 requires of a status anywhere.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from hazel_tracking.config import Config
 from hazel_tracking.github import facts, problems, queries
-from hazel_tracking.github.calls import PAGE_LIMIT, Reader, dig, nodes, page_cursor
-from hazel_tracking.github.collecting import groups, guard, report
+from hazel_tracking.github.calls import PAGE_LIMIT, Reader, dig, nodes, page_cursor, too_long
+from hazel_tracking.github.collecting import guard, report, second_read
 from hazel_tracking.model import (
     NOT_GATHERED,
     Gathered,
@@ -45,8 +43,8 @@ logger = logging.getLogger(__name__)
 class PullRequestsState:
     """What the gather of the open pull requests has collected.
 
-    `pull_requests` is `None` until the search answers, and stays `None` where it could not be
-    read to its end: which pull requests are open is a fact of the whole list.
+    `pull_requests` is `None` until the search has been read to its end, and stays `None` where it
+    could not be: which pull requests are open is a fact of the whole list.
     """
 
     pull_requests: list[OpenPullRequest] | None = None
@@ -74,19 +72,25 @@ async def collect(cfg: Config, reader: Reader, state: PullRequestsState) -> None
 
 
 async def _search(cfg: Config, reader: Reader, state: PullRequestsState) -> None:
+    """The search, page by page to its end.
+
+    Which pull requests are open is a fact of the whole list, so the list is written only when the
+    last page has answered: a search cut short, or one whose later page failed, leaves the tab with
+    no list rather than with the first hundred read as the whole of it (R11).
+    """
     cursor: str | None = None
     found: list[OpenPullRequest] = []
+    uncomputed: set[tuple[str, int]] = set()
     for number in range(1, PAGE_LIMIT + 1):
+        call = problems.page(problems.SEARCH, number)
         reply = await reader.graphql(
-            problems.page(problems.SEARCH, number),
+            call,
             queries.OPEN_PULL_REQUESTS_OPERATION,
             queries.OPEN_PULL_REQUESTS,
             {"query": queries.search_query(cfg.github_org), "cursor": cursor, "pulls": queries.SEARCH_PAGE},
         )
         connection = dig(reply.data, "search")
-        if connection is None:
-            state.pull_requests = None
-            state.uncomputed.clear()
+        if reply.failure is not None or connection is None:
             report(state.problems, cfg, "the open pull requests", reply)
             return
         for node in nodes(connection):
@@ -94,11 +98,15 @@ async def _search(cfg: Config, reader: Reader, state: PullRequestsState) -> None
             if kept is not None:
                 found.append(kept)
                 if isinstance(kept.pull_request.status, NotGathered):
-                    state.uncomputed.add((kept.repository, kept.pull_request.number))
-        state.pull_requests = list(found)
+                    uncomputed.add((kept.repository, kept.pull_request.number))
         cursor = page_cursor(connection)
         if cursor is None:
+            state.pull_requests = found
+            state.uncomputed = uncomputed
             return
+    state.problems.append(
+        problems.from_failure("the open pull requests", too_long(problems.SEARCH), cfg.time_zone)
+    )
 
 
 def _open_pull_request(node: object) -> OpenPullRequest | None:
@@ -127,40 +135,11 @@ def _open_pull_request(node: object) -> OpenPullRequest | None:
 
 async def _second_read(cfg: Config, reader: Reader, state: PullRequestsState) -> None:
     """R4's second read, for the statuses the search answered as uncomputed."""
-    waiting = sorted(state.uncomputed)
-    batches = groups(waiting, queries.PULL_REQUEST_GROUP)
-    async with asyncio.TaskGroup() as group:
-        for index, batch in enumerate(batches, start=1):
-            what = "the status of " + problems.listed([f"{name}#{number}" for name, number in batch])
-            group.create_task(
-                guard(state.problems, what, _statuses(cfg, reader, state, batch, index, len(batches)))
-            )
 
+    def publish(repository: str, number: int, status: PullRequestStatus) -> None:
+        _set_status(state, repository, number, status)
 
-async def _statuses(
-    cfg: Config,
-    reader: Reader,
-    state: PullRequestsState,
-    batch: Sequence[tuple[str, int]],
-    index: int,
-    batches: int,
-) -> None:
-    call = problems.group(problems.STATUSES, index, batches)
-    targets = [queries.PullRequestTarget(name.rpartition("/")[2], number) for name, number in batch]
-    reply = await reader.graphql(
-        call, queries.STATUSES_OPERATION, queries.statuses(targets), {"owner": cfg.github_org}
-    )
-    if reply.data is None:
-        what = "the status of " + problems.listed([f"{name}#{number}" for name, number in batch])
-        report(state.problems, cfg, what, reply)
-        return
-    for position, (name, number) in enumerate(batch):
-        pull = dig(reply.data, f"s{position}", "pullRequest")
-        status = facts.pull_request_status(pull) if pull is not None else None
-        if status is not None:
-            _set_status(state, name, number, status)
-        elif pull is None:
-            report(state.problems, cfg, f"the status of {name}#{number}", reply)
+    await second_read(cfg, reader, state.problems, sorted(state.uncomputed), publish)
 
 
 def _set_status(state: PullRequestsState, repository: str, number: int, status: PullRequestStatus) -> None:

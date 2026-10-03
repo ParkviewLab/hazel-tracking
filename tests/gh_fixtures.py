@@ -8,11 +8,13 @@ Their names carry the prefix `gh_`. `gh_organisation` is the synthetic organisat
 the tests read: it is shaped like the one the Dashboard will read, with a repository
 for each case the readings turn on (a repository ready to cut a release, one with
 every condition failing, a website repository, one whose default branch is its only
-trunk, one with no release and two packages, one whose statuses GitHub had not
-computed, and an archived one that is counted and left out). `gh_github` answers
-from it, `gh_config` names it, and `gh_client` is the client the gathering reads
-through, built by `app.default_http_client` so that the seam under test is the one
-the service uses.
+trunk, one with no release and two packages, one whose status GitHub computes at the
+second read, and an archived one that is counted and left out). Every call of it
+answers whole, so that a test of a gather with nothing wrong has nothing wrong in it;
+`gh_uncomputed` is the one organisation apart from it, for the status GitHub never
+computes. `gh_github` answers from it, `gh_config` names it, and `gh_client` is the
+client the gathering reads through, built by `app.default_http_client` so that the
+seam under test is the one the service uses.
 """
 
 from __future__ import annotations
@@ -42,13 +44,14 @@ ORGANISATION = "ExampleOrg"
 def gh_atlas() -> FakeRepository:
     """Ready to cut a release: one unreleased pull request, which changes the documentation, the
     checks on `develop` passing under a `[skip ci]` head, and no pending back-merge. Its newest
-    tag is higher than its newest Release, and its dev release is older than both. One of its
+    tag is higher than its newest Release, and its dev release is older than both; among its tags
+    are a pre-release and an unprefixed version, which are not final versions (R3). One of its
     open pull requests is into `main` rather than the integration trunk, which the detail lists
     and the pull-requests tab leaves out."""
     return FakeRepository(
         name="atlas",
         issues=3,
-        tags=("v0.1.0", "v0.2.0", "v0.10.0", "not-a-version"),
+        tags=("v0.1.0", "v0.2.0", "v0.10.0", "v0.11.0rc1", "0.12.0", "not-a-version"),
         latest_release="v0.2.0",
         branches=("feature-charts", "dependabot/pip/httpx-1.0.0", "hotfix-pick"),
         history={
@@ -133,9 +136,9 @@ def gh_fieldwork() -> FakeRepository:
 
 
 def gh_quarry() -> FakeRepository:
-    """Two statuses GitHub had not computed at the first read: one it computes at the second, and
-    one it does not, which is then not gathered (R4). Its third open pull request is a release's
-    back-merge, which the detail lists and the pull-requests tab leaves out (R5)."""
+    """A status GitHub had not computed at the first read and computes at the second (R4). Its other
+    open pull request is a release's back-merge, which the detail lists and the pull-requests tab
+    leaves out (R5)."""
     return FakeRepository(
         name="quarry",
         tags=("v0.5.0",),
@@ -146,7 +149,6 @@ def gh_quarry() -> FakeRepository:
             FakePullRequest(
                 number=11, head="fix-leak", title="fix: the leak", rollup=None, uncomputed_reads=1
             ),
-            FakePullRequest(number=12, head="ops-runner", title="ops: the runner", uncomputed_reads=5),
             FakePullRequest(
                 number=13,
                 head="back-merge-v0.5.0",
@@ -182,6 +184,30 @@ def gh_packages() -> tuple[FakePackage, ...]:
             versions=(("dev", "0.4.0.dev2"), ("sha-222",)),
         ),
         FakePackage(name="orphan", repository=None, versions=(("dev", "9.9.9.dev1"),)),
+    )
+
+
+def gh_uncomputed() -> FakeOrganisation:
+    """An organisation with one pull request whose status GitHub never computes, which the second
+    read leaves not gathered beside a problem of its own (R4). It is apart from `gh_organisation`,
+    which every call answers whole, so that a test of a gather with nothing wrong has nothing wrong
+    in it."""
+    return FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(
+            FakeRepository(
+                name="quarry",
+                tags=("v0.5.0",),
+                latest_release="v0.5.0",
+                branches=("ops-runner",),
+                history={"develop": (FakeCommit("d1", "SUCCESS"),), "main": (FakeCommit("m1", "SUCCESS"),)},
+                pulls=(
+                    FakePullRequest(
+                        number=12, head="ops-runner", title="ops: the runner", uncomputed_reads=5
+                    ),
+                ),
+            ),
+        ),
     )
 
 

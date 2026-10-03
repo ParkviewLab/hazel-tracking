@@ -124,6 +124,16 @@ def redact(text: str | None, token: str | None) -> str | None:
     return named[:MESSAGE_LIMIT] or None
 
 
+def too_long(call: str) -> Failure:
+    """The failure a list longer than `PAGE_LIMIT` pages makes: it was not read whole, so the fact it
+    feeds is not gathered rather than counted short (R7)."""
+    return Failure(
+        call=call,
+        kind=FailureKind.TOO_LONG,
+        message=f"the list runs past the {PAGE_LIMIT} pages one gather reads",
+    )
+
+
 def aware(moment: str | None) -> datetime | None:
     """An ISO 8601 instant as GitHub writes it (`2026-10-03T14:03:12Z`), aware; `None` where it
     is absent or not an instant."""
@@ -256,16 +266,7 @@ class Reader:
             if len(reply.data) < REST_PAGE:
                 return items, None
         logger.warning("the list for %s runs past %s pages and was not read whole", call, PAGE_LIMIT)
-        return items, self.too_long(call)
-
-    def too_long(self, call: str) -> Failure:
-        """The failure a list longer than `PAGE_LIMIT` pages makes: it was not read whole, so the
-        fact it feeds is not gathered rather than counted short (R7)."""
-        return Failure(
-            call=call,
-            kind=FailureKind.TOO_LONG,
-            message=f"the list runs past the {PAGE_LIMIT} pages one gather reads",
-        )
+        return items, too_long(call)
 
     async def _send(
         self,

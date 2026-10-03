@@ -56,8 +56,9 @@ from hazel_tracking.github.calls import (
     dig,
     nodes,
     page_cursor,
+    too_long,
 )
-from hazel_tracking.github.collecting import groups, guard, report
+from hazel_tracking.github.collecting import groups, guard, lost, report, second_read
 from hazel_tracking.model import (
     NOT_GATHERED,
     CheckState,
@@ -95,10 +96,14 @@ class RepositoryState:
 
     A list that is `None` is one that was not gathered, which is not the same as one gathered
     and found empty: a repository with no tag has `tags == []` and its newest tag reads "none"
-    (R7). `compared` holds the oids of the commits the integration trunk has and the release trunk
-    lacks, which REST's comparison gives, and `merged` the merged pull requests among them by
-    number with each one's head branch, which GraphQL gives for those oids; `compared_failed` marks
-    a comparison that could not be read whole, whose count is then not gathered.
+    (R7). A list is written only when it has been read to its end, what has arrived of it waiting in
+    `reading` or `reading_pulls` until then, so that a list still being read when the wait runs out
+    is not gathered rather than published part-read (R11).
+
+    `merged` is the merged pull requests among the commits the integration trunk has and the release
+    trunk lacks, by number with each one's head branch, written when every call feeding it has
+    answered. `files_pending` is true whilst the unreleased work is still being read, which is what
+    leaves the documentation mark ungathered until it is settled.
     """
 
     name: str
@@ -109,6 +114,8 @@ class RepositoryState:
     newest_release: Fact[str | None] = NOT_GATHERED
     tags: list[str] | None = None
     branches: list[str] | None = None
+    reading: dict[str, list[str]] = field(default_factory=dict)
+    reading_pulls: list[PullRequest] | None = None
     checks: dict[str, Fact[CheckState]] = field(default_factory=dict)
     integration_checks: CheckState | None = None
     integration_read: bool = False
@@ -116,10 +123,9 @@ class RepositoryState:
     pulls: list[PullRequest] | None = None
     heads: dict[str, PullRequestRef] = field(default_factory=dict)
     uncomputed: set[int] = field(default_factory=set)
-    compared: list[str] | None = None
-    compared_failed: bool = False
     merged: dict[int, str] | None = None
     back_merge_pending: Fact[bool] = NOT_GATHERED
+    files_pending: bool = False
     documentation_found: bool = False
     documentation_failed: bool = False
     cursors: dict[str, str | None] = field(default_factory=dict)
@@ -129,7 +135,7 @@ class RepositoryState:
 
     def to_model(self, dev_release: Fact[DevRelease | None]) -> Repository:
         """This repository in the words of the contract, every fact it lacks not gathered."""
-        counted = self.merged is not None and not self.compared_failed
+        counted = self.merged is not None
         unreleased_count: Fact[int] = Gathered(len(self.merged or {})) if counted else NOT_GATHERED
         has_release_trunk = self.trunks.release is not None
         return Repository(
@@ -149,9 +155,13 @@ class RepositoryState:
         )
 
     def _documentation(self) -> Fact[bool]:
-        if self.merged is None or self.compared_failed or self.documentation_failed:
+        """The documentation mark (R5). A mark one pull request has proved true stands whatever
+        became of the others: no further file can make it false."""
+        if self.documentation_found:
+            return Gathered(True)
+        if self.merged is None or self.files_pending or self.documentation_failed:
             return NOT_GATHERED
-        return Gathered(self.documentation_found)
+        return Gathered(False)
 
     def _readiness(self, unreleased: Fact[int]) -> Fact[Readiness] | None:
         """Readiness, for a repository whose trunks are `main` and `develop` alone (R6), and not
@@ -185,15 +195,18 @@ class RepositoryState:
 class FullState:
     """What the full gather has collected so far.
 
-    `archived` counts the archived repositories left out, and stays `None` until the list of
-    repositories arrives (R11). `dev_versions` is `None` until the packages answer, and holds the
-    dev versions published for each repository that has any; `dev_failures` names the
-    repositories whose own package could not be read, whose dev release alone is then ungathered.
+    `archived` counts the archived repositories left out, and is written only where the list of
+    repositories was read to its end, since a count of some of the pages is no count (R11).
+    `dev_versions` is `None` until the packages answer, and holds the dev versions published for each
+    repository that has any; `dev_pending` counts the packages of a repository still being read and
+    `dev_failures` names the repositories whose package could not be read, whose dev release alone is
+    ungathered in either case.
     """
 
     repositories: list[RepositoryState] = field(default_factory=list)
     archived: int | None = None
     dev_versions: dict[str, list[str]] | None = None
+    dev_pending: dict[str, int] = field(default_factory=dict)
     dev_failures: set[str] = field(default_factory=set)
     problems: list[Problem] = field(default_factory=list)
 
@@ -206,6 +219,8 @@ class FullState:
         """The dev release where it is newer than the final release (R3), and not gathered where
         the packages, or the final release it is compared with, could not be read."""
         if self.dev_versions is None or state.name in self.dev_failures:
+            return NOT_GATHERED
+        if self.dev_pending.get(state.name):
             return NOT_GATHERED
         if state.tags is None or not isinstance(state.newest_release, Gathered):
             return NOT_GATHERED
@@ -250,6 +265,8 @@ async def _repositories(cfg: Config, reader: Reader, state: FullState) -> None:
     list one answer.
     """
     cursor: str | None = None
+    archived = 0
+    whole = True
     for number in range(1, PAGE_LIMIT + 1):
         call = problems.page(problems.REPOSITORIES, number)
         reply = await reader.graphql(
@@ -269,6 +286,7 @@ async def _repositories(cfg: Config, reader: Reader, state: FullState) -> None:
         if reply.failure is not None or connection is None:
             what = "every repository's facts" if number == 1 else "the repositories GitHub had not yet listed"
             report(state.problems, cfg, what, reply)
+            whole = False
         if connection is None:
             return
         if not isinstance(dig(connection, "nodes"), list):
@@ -276,23 +294,32 @@ async def _repositories(cfg: Config, reader: Reader, state: FullState) -> None:
             # so an answer whose shape cannot be read is reported rather than read as empty.
             report(state.problems, cfg, "every repository's facts", Reply(call=call))
             return
-        if state.archived is None:
-            state.archived = 0
         for node in nodes(connection):
-            _read_repository(state, node)
+            archived += _read_repository(state, node)
         cursor = page_cursor(connection)
         if cursor is None:
+            if whole:
+                # The count is a count of the whole list, so it is written only where the whole list
+                # arrived; the repositories that did arrive stand either way (R11).
+                state.archived = archived
             return
+    state.problems.append(
+        problems.from_failure("the repositories GitHub had not yet listed", too_long(call), cfg.time_zone)
+    )
 
 
-def _read_repository(state: FullState, node: Any) -> None:
-    """One repository of the answer, archived ones counted and left out."""
+def _read_repository(state: FullState, node: Any) -> int:
+    """One repository of the answer, archived ones left out; returns 1 where one was counted.
+
+    A list GitHub answered in full here is written as the fact it feeds; one it answered in part
+    waits in `reading` until the rest of it has been read, and one it answered with a null is left
+    not gathered, since a null is a loss and not an empty list.
+    """
     name = dig(node, "nameWithOwner")
     if not isinstance(name, str):
-        return
+        return 0
     if dig(node, "isArchived"):
-        state.archived = (state.archived or 0) + 1
-        return
+        return 1
     shape = facts.trunks(facts.default_branch(node))
     repository = RepositoryState(name=name, repository=name.rpartition("/")[2], trunks=shape)
     repository.last_push = Gathered(aware(dig(node, "pushedAt")))
@@ -300,11 +327,17 @@ def _read_repository(state: FullState, node: Any) -> None:
     repository.open_issues = Gathered(issues) if isinstance(issues, int) else NOT_GATHERED
     release = dig(node, "latestRelease", "tagName")
     repository.newest_release = Gathered(release if isinstance(release, str) else None)
-    for kind, key in ((_TAGS, "tags"), (_BRANCHES, "branches")):
-        connection = dig(node, key)
+    for kind in (_TAGS, _BRANCHES):
+        connection = dig(node, kind)
+        if connection is None:
+            continue
         names = [found for found in (dig(ref, "name") for ref in nodes(connection)) if isinstance(found, str)]
-        setattr(repository, kind, names)
-        repository.cursors[kind] = page_cursor(connection)
+        cursor = page_cursor(connection)
+        if cursor is None:
+            setattr(repository, kind, names)  # `kind` is the field's own name, `tags` or `branches`
+        else:
+            repository.reading[kind] = names
+            repository.cursors[kind] = cursor
     for trunk in (shape.release, shape.integration):
         if trunk:
             repository.checks[trunk] = Gathered(
@@ -315,16 +348,28 @@ def _read_repository(state: FullState, node: Any) -> None:
         repository.integration_checks = facts.finished_checks(integration)
         repository.integration_read = True
     pulls = dig(node, "pullRequests")
-    repository.pulls = []
-    _read_pull_requests(repository, nodes(pulls))
-    repository.cursors[_PULLS] = page_cursor(pulls)
+    if pulls is not None:
+        staged = _read_pull_requests(repository, nodes(pulls), [])
+        cursor = page_cursor(pulls)
+        if cursor is None:
+            repository.pulls = staged
+        else:
+            repository.reading_pulls = staged
+            repository.cursors[_PULLS] = cursor
     state.repositories.append(repository)
+    return 0
 
 
-def _read_pull_requests(repository: RepositoryState, pull_nodes: list[Any]) -> None:
+def _read_pull_requests(
+    repository: RepositoryState, pull_nodes: list[Any], into: list[PullRequest]
+) -> list[PullRequest]:
     """The open pull requests of one repository, with their statuses (R4) and the branch each
-    one is open from, which is how a working branch finds its pull request."""
-    listed = repository.pulls if repository.pulls is not None else []
+    one is open from, which is how a working branch finds its pull request.
+
+    A branch is matched on its name and on the repository it is in, so that a pull request from a
+    fork's branch of the same name is not read as this repository's branch; where two pull requests
+    are open from one branch, the lower number is the one the branch carries.
+    """
     for pull in pull_nodes:
         number, url = dig(pull, "number"), dig(pull, "url")
         if not isinstance(number, int):
@@ -333,20 +378,24 @@ def _read_pull_requests(repository: RepositoryState, pull_nodes: list[Any]) -> N
         status = facts.pull_request_status(pull)
         if status is None:
             repository.uncomputed.add(number)
-        listed.append(
+        into.append(
             PullRequest(
                 number=number, url=address, status=NOT_GATHERED if status is None else Gathered(status)
             )
         )
         head = dig(pull, "headRefName")
-        if isinstance(head, str):
-            repository.heads[head] = PullRequestRef(number=number, url=address)
-    repository.pulls = listed
+        from_here = dig(pull, "headRepository", "nameWithOwner") == repository.name
+        if isinstance(head, str) and from_here:
+            open_already = repository.heads.get(head)
+            if open_already is None or number < open_already.number:
+                repository.heads[head] = PullRequestRef(number=number, url=address)
+    return into
 
 
 async def _continuations(cfg: Config, reader: Reader, state: FullState) -> None:
     """The rest of every list one page did not hold. They are read before the comparisons, which
-    need the whole list of branches to know what to compare."""
+    need the whole list of branches to know what to compare; each list is written as the fact it
+    feeds only when it has been read to its end."""
     async with asyncio.TaskGroup() as group:
         for repository in state.repositories:
             for kind in (_TAGS, _BRANCHES):
@@ -372,9 +421,11 @@ async def _more_refs(
     call = problems.of_repository(f"the {kind}", repository.name)
     what = f"the {'newest tag' if kind == _TAGS else 'branches'} of {repository.name}"
     cursor = repository.cursors.get(kind)
+    found = repository.reading.get(kind, [])
     for number in range(2, PAGE_LIMIT + 1):
+        page = problems.page(call, number)
         reply = await reader.graphql(
-            problems.page(call, number),
+            page,
             queries.REFS_OPERATION,
             queries.REFS,
             {
@@ -386,16 +437,15 @@ async def _more_refs(
             },
         )
         connection = dig(reply.data, "repository", "refs")
-        if connection is None:
-            setattr(repository, kind, None)
+        if reply.failure is not None or connection is None:
             report(state.problems, cfg, what, reply)
             return
-        found: list[str] = getattr(repository, kind) or []
         found.extend(name for ref in nodes(connection) if isinstance(name := dig(ref, "name"), str))
-        setattr(repository, kind, found)
         cursor = page_cursor(connection)
         if cursor is None:
+            setattr(repository, kind, found)  # `kind` is the field's own name, `tags` or `branches`
             return
+    state.problems.append(problems.from_failure(what, too_long(call), cfg.time_zone))
 
 
 async def _more_pulls(cfg: Config, reader: Reader, state: FullState, repository: RepositoryState) -> None:
@@ -404,6 +454,7 @@ async def _more_pulls(cfg: Config, reader: Reader, state: FullState, repository:
     call = problems.of_repository("the open pull requests", repository.name)
     what = f"the open pull requests of {repository.name}"
     cursor = repository.cursors.get(_PULLS)
+    staged = repository.reading_pulls if repository.reading_pulls is not None else []
     for number in range(2, PAGE_LIMIT + 1):
         reply = await reader.graphql(
             problems.page(call, number),
@@ -417,60 +468,34 @@ async def _more_pulls(cfg: Config, reader: Reader, state: FullState, repository:
             },
         )
         connection = dig(reply.data, "repository", "pullRequests")
-        if connection is None:
-            repository.pulls = None
+        if reply.failure is not None or connection is None:
             repository.heads.clear()
             repository.uncomputed.clear()
             report(state.problems, cfg, what, reply)
             return
-        _read_pull_requests(repository, nodes(connection))
+        _read_pull_requests(repository, nodes(connection), staged)
         cursor = page_cursor(connection)
         if cursor is None:
+            repository.pulls = staged
             return
+    repository.heads.clear()
+    repository.uncomputed.clear()
+    state.problems.append(problems.from_failure(what, too_long(call), cfg.time_zone))
 
 
 async def _second_read(cfg: Config, reader: Reader, state: FullState) -> None:
-    """R4's second read: a status GitHub had not computed is read once more, and if it is still
-    not computed it is not gathered."""
-    waiting = [
-        (repository, number)
-        for repository in state.repositories
-        for number in sorted(repository.uncomputed)
-        if repository.pulls is not None
+    """R4's second read, for the statuses the repositories query answered as uncomputed."""
+    by_name = {
+        repository.name: repository for repository in state.repositories if repository.pulls is not None
+    }
+    targets = [
+        (name, number) for name, repository in by_name.items() for number in sorted(repository.uncomputed)
     ]
-    if not waiting:
-        return
-    batches = groups(waiting, queries.PULL_REQUEST_GROUP)
-    async with asyncio.TaskGroup() as group:
-        for index, batch in enumerate(batches, start=1):
-            what = "the status of " + problems.listed([f"{r.name}#{n}" for r, n in batch])
-            group.create_task(
-                guard(state.problems, what, _statuses(cfg, reader, state, batch, index, len(batches)))
-            )
 
+    def publish(name: str, number: int, status: PullRequestStatus) -> None:
+        _set_status(by_name[name], number, status)
 
-async def _statuses(
-    cfg: Config,
-    reader: Reader,
-    state: FullState,
-    batch: Sequence[tuple[RepositoryState, int]],
-    index: int,
-    batches: int,
-) -> None:
-    call = problems.group(problems.STATUSES, index, batches)
-    document = queries.statuses([queries.PullRequestTarget(r.repository, number) for r, number in batch])
-    reply = await reader.graphql(call, queries.STATUSES_OPERATION, document, {"owner": cfg.github_org})
-    if reply.data is None:
-        what = "the status of " + problems.listed([f"{r.name}#{n}" for r, n in batch])
-        report(state.problems, cfg, what, reply)
-        return
-    for position, (repository, number) in enumerate(batch):
-        pull = dig(reply.data, f"s{position}", "pullRequest")
-        status = facts.pull_request_status(pull) if pull is not None else None
-        if status is not None:
-            _set_status(repository, number, status)
-        elif pull is None:
-            report(state.problems, cfg, f"the status of {repository.name}#{number}", reply)
+    await second_read(cfg, reader, state.problems, targets, publish)
 
 
 def _set_status(repository: RepositoryState, number: int, status: PullRequestStatus) -> None:
@@ -482,9 +507,12 @@ def _set_status(repository: RepositoryState, number: int, status: PullRequestSta
 
 
 async def _comparisons(cfg: Config, reader: Reader, state: FullState) -> None:
-    """Each repository's trunk comparison, for the unreleased work and a pending back-merge, and
-    each working branch's, for its lag; then what the compared commits belong to, and the files of
-    those pull requests, which only the comparisons name."""
+    """The comparisons, each repository on its own: its trunks' and each working branch's.
+
+    A repository's unreleased work is read as one chain, the comparison and then what the commits it
+    gave belong to and then the files of those pull requests, so that it starts as soon as that
+    repository's own comparison has answered and one repository's loss is no other's (axiom 8).
+    """
     async with asyncio.TaskGroup() as group:
         for repository in state.repositories:
             if not repository.trunks.integration:
@@ -493,15 +521,38 @@ async def _comparisons(cfg: Config, reader: Reader, state: FullState) -> None:
             if release is not None:
                 what = f"the unreleased work of {repository.name}"
                 group.create_task(
-                    guard(state.problems, what, _trunk_comparison(cfg, reader, state, repository, release))
+                    guard(state.problems, what, _unreleased(cfg, reader, state, repository, release))
                 )
             for branch in repository.working_branch_names():
                 what = f"the lag of the branch {branch} of {repository.name}"
                 group.create_task(
                     guard(state.problems, what, _branch_lag(cfg, reader, state, repository, branch))
                 )
-    await guard(state.problems, "the unreleased pull requests", _commit_pull_requests(cfg, reader, state))
-    await guard(state.problems, "the documentation in the unreleased work", _files(cfg, reader, state))
+
+
+async def _unreleased(
+    cfg: Config, reader: Reader, state: FullState, repository: RepositoryState, release: str
+) -> None:
+    """One repository's unreleased work, end to end (R5).
+
+    Each fact is written only when every call feeding it has answered: the count when the comparison
+    and every commit of it have been read, the documentation mark when the files have. Whilst the
+    chain runs, `files_pending` keeps the mark ungathered, and it stays set where the chain is cut
+    short by the wait or by an answer that could not be read.
+    """
+    repository.files_pending = True
+    oids = await _trunk_comparison(cfg, reader, state, repository, release)
+    if oids is None:
+        repository.files_pending = False
+        return
+    merged = await _commits_of(cfg, reader, state, repository, oids) if oids else {}
+    if merged is None:
+        repository.files_pending = False
+        return
+    repository.merged = merged
+    if merged:
+        await _files_of(cfg, reader, state, repository, merged)
+    repository.files_pending = False
 
 
 def _compare_path(cfg: Config, repository: RepositoryState, base: str, head: str) -> str:
@@ -513,13 +564,14 @@ def _compare_path(cfg: Config, repository: RepositoryState, base: str, head: str
 
 async def _trunk_comparison(
     cfg: Config, reader: Reader, state: FullState, repository: RepositoryState, release: str
-) -> None:
-    """The commits the integration trunk has and the release trunk lacks, and whether the release
-    trunk holds any the integration trunk lacks (R5, R6).
+) -> list[str] | None:
+    """The oids of the commits the integration trunk has and the release trunk lacks, and `None`
+    where the comparison could not be read whole (R5, R6).
 
-    The comparison is read page by page for its commits. GitHub answers at most 250 of them
-    whatever is asked for, so where it says the comparison is longer the count cannot be made and
-    is left not gathered beside a problem saying how far the list went.
+    Whether the release trunk holds any commit the integration trunk lacks comes from the same
+    answer and stands on its own. The comparison is read page by page for its commits; GitHub
+    answers at most 250 of them whatever is asked for, so where it says the comparison is longer, or
+    does not say how long it is, the count cannot be made.
     """
     integration = repository.trunks.integration
     call = problems.of_repository(problems.COMPARISON, repository.name)
@@ -534,13 +586,15 @@ async def _trunk_comparison(
             report(state.problems, cfg, what, reply)
             if number == 1:
                 report(state.problems, cfg, f"a pending back-merge of {repository.name}", reply)
-            repository.compared_failed = True
-            return
+            return None
         if number == 1:
             behind = comparison.get("behind_by")
             repository.back_merge_pending = Gathered(behind > 0) if isinstance(behind, int) else NOT_GATHERED
             counted = comparison.get("total_commits")
-            total = counted if isinstance(counted, int) else 0
+            if not isinstance(counted, int):
+                state.problems.append(problems.empty(what, reply.call))
+                return None
+            total = counted
             logger.debug(
                 "%s is ahead of %s by %s commits in %s",
                 integration,
@@ -552,15 +606,13 @@ async def _trunk_comparison(
             sha for commit in comparison.get("commits") or [] if isinstance(sha := dig(commit, "sha"), str)
         ]
         oids.extend(page)
-        if len(oids) >= total or not page:
+        if len(oids) >= total:
+            return oids
+        if not page:
             break
     if len(oids) < total:
         state.problems.append(problems.truncated(what, call, len(oids), total, COMPARISON_COMMIT_LIMIT))
-        repository.compared_failed = True
-        return
-    repository.compared = oids
-    if not oids:
-        repository.merged = {}
+    return None
 
 
 async def _branch_lag(
@@ -578,146 +630,95 @@ async def _branch_lag(
         report(state.problems, cfg, f"the lag of the branch {branch} of {repository.name}", reply)
 
 
-async def _commit_pull_requests(cfg: Config, reader: Reader, state: FullState) -> None:
-    """What the compared commits belong to: the merged pull requests among them, by the oids the
-    comparisons gave (R5). A commit that belongs to no pull request is a direct commit and counts
-    as none."""
-    waiting = [
-        (repository, oid)
-        for repository in state.repositories
-        if repository.compared
-        for oid in repository.compared
-    ]
-    if not waiting:
-        return
-    batches = groups(waiting, queries.COMMIT_GROUP)
-    async with asyncio.TaskGroup() as group:
-        for index, batch in enumerate(batches, start=1):
-            what = _unreleased_what([repository for repository, _ in batch])
-            group.create_task(
-                guard(state.problems, what, _commit_group(cfg, reader, state, batch, index, len(batches)))
-            )
+async def _commits_of(
+    cfg: Config, reader: Reader, state: FullState, repository: RepositoryState, oids: Sequence[str]
+) -> dict[int, str] | None:
+    """The merged pull requests among these commits, by number with each one's head branch, and
+    `None` where any of them could not be read (R5).
 
-
-def _unreleased_what(repositories: Sequence[RepositoryState]) -> str:
-    names = problems.listed(sorted({repository.name for repository in repositories}))
-    return f"the unreleased work of {names}"
-
-
-def _by_repository(
-    batch: Sequence[tuple[RepositoryState, str]],
-) -> list[tuple[RepositoryState, list[str]]]:
-    """The batch's commits grouped by their repository, in the batch's order, which is the order
-    the aliases of the query take."""
-    grouped: list[tuple[RepositoryState, list[str]]] = []
-    for repository, oid in batch:
-        if grouped and grouped[-1][0] is repository:
-            grouped[-1][1].append(oid)
-        else:
-            grouped.append((repository, [oid]))
-    return grouped
-
-
-async def _commit_group(
-    cfg: Config,
-    reader: Reader,
-    state: FullState,
-    batch: Sequence[tuple[RepositoryState, str]],
-    index: int,
-    batches: int,
-) -> None:
-    call = problems.group(problems.COMMITS, index, batches)
-    grouped = _by_repository(batch)
-    document = queries.commit_pull_requests(
-        [queries.CommitTarget(repository=repository.repository, oids=oids) for repository, oids in grouped]
-    )
-    reply = await reader.graphql(
-        call,
-        queries.COMMIT_PULL_REQUESTS_OPERATION,
-        document,
-        {"owner": cfg.github_org, "associated": queries.ASSOCIATED_PULL_REQUESTS},
-    )
-    if reply.data is None:
-        for repository, _ in batch:
-            repository.compared_failed = True
-        report(state.problems, cfg, _unreleased_what([repository for repository, _ in batch]), reply)
-        return
-    for position, (repository, oids) in enumerate(grouped):
-        answered = dig(reply.data, f"r{position}")
-        if answered is None:
-            repository.compared_failed = True
-            report(state.problems, cfg, _unreleased_what([repository]), reply)
-            continue
-        commits = [dig(answered, f"c{place}") for place in range(len(oids))]
-        if any(commit is None for commit in commits):
-            repository.compared_failed = True
-            report(state.problems, cfg, _unreleased_what([repository]), reply)
-            continue
-        found = repository.merged if repository.merged is not None else {}
+    A commit that belongs to no pull request is a direct commit and counts as none. The commits are
+    read in groups, one group to a query, and one after another: a repository with more commits
+    unreleased than one query names is rare, and the count is of all of them or of none.
+    """
+    found: dict[int, str] = {}
+    batches = groups(list(oids), queries.COMMIT_GROUP)
+    for index, batch in enumerate(batches, start=1):
+        call = problems.group(problems.of_repository(problems.COMMITS, repository.name), index, len(batches))
+        what = f"the unreleased work of {repository.name}"
+        document = queries.commit_pull_requests([queries.CommitTarget(repository.repository, batch)])
+        reply = await reader.graphql(
+            call,
+            queries.COMMIT_PULL_REQUESTS_OPERATION,
+            document,
+            {"owner": cfg.github_org, "associated": queries.ASSOCIATED_PULL_REQUESTS},
+        )
+        if reply.failure is not None:
+            report(state.problems, cfg, what, reply)
+        if reply.data is None:
+            return None
+        commits = []
+        for place in range(len(batch)):
+            commit = dig(reply.data, "r0", f"c{place}")
+            if lost(state.problems, what, reply, commit, "r0", f"c{place}"):
+                return None
+            commits.append(commit)
         found.update(facts.merged_pull_requests(commits))
-        repository.merged = found
+    return found
 
 
-async def _files(cfg: Config, reader: Reader, state: FullState) -> None:
-    """Whether any unreleased pull request changes the documentation, the files under `docs/` and
-    `site/` (R5). A repository with no unreleased pull request carries no mark, which is a fact
-    gathered and false."""
-    waiting = [
-        (repository, number)
-        for repository in state.repositories
-        if repository.merged
-        for number in sorted(repository.merged)
-    ]
-    if not waiting:
-        return
-    batches = groups(waiting, queries.PULL_REQUEST_GROUP)
-    async with asyncio.TaskGroup() as group:
-        for index, batch in enumerate(batches, start=1):
-            what = _files_what([repository for repository, _ in batch])
-            group.create_task(
-                guard(state.problems, what, _files_group(cfg, reader, state, batch, index, len(batches)))
-            )
-
-
-def _files_what(repositories: Sequence[RepositoryState]) -> str:
-    names = problems.listed(sorted({repository.name for repository in repositories}))
-    return f"whether the unreleased work of {names} changes the documentation"
-
-
-async def _files_group(
-    cfg: Config,
-    reader: Reader,
-    state: FullState,
-    batch: Sequence[tuple[RepositoryState, int]],
-    index: int,
-    batches: int,
+async def _files_of(
+    cfg: Config, reader: Reader, state: FullState, repository: RepositoryState, merged: Mapping[int, str]
 ) -> None:
-    call = problems.group(problems.FILES, index, batches)
-    document = queries.files([queries.PullRequestTarget(r.repository, number) for r, number in batch])
-    reply = await reader.graphql(
-        call, queries.FILES_OPERATION, document, {"owner": cfg.github_org, "files": queries.FILES_PAGE}
-    )
-    if reply.data is None:
-        for repository, _ in batch:
+    """Whether any of this repository's unreleased pull requests changes the documentation, the
+    files under `docs/` and `site/` (R5).
+
+    The first page of each pull request's files comes in one query for all of them; where a pull
+    request changed more than a page of files and none of that page was documentation, the rest of
+    its pages are read beside the other pull requests' and not after them. Once one path settles the
+    mark, the rest need not be read at all.
+    """
+    numbers = sorted(merged)
+    batches = groups(numbers, queries.PULL_REQUEST_GROUP)
+    for index, batch in enumerate(batches, start=1):
+        call = problems.group(problems.of_repository(problems.FILES, repository.name), index, len(batches))
+        what = f"whether the unreleased work of {repository.name} changes the documentation"
+        targets = [queries.PullRequestTarget(repository.repository, number) for number in batch]
+        reply = await reader.graphql(
+            call,
+            queries.FILES_OPERATION,
+            queries.files(targets),
+            {"owner": cfg.github_org, "files": queries.FILES_PAGE},
+        )
+        if reply.failure is not None:
+            report(state.problems, cfg, what, reply)
+        if reply.data is None:
             repository.documentation_failed = True
-        report(state.problems, cfg, _files_what([repository for repository, _ in batch]), reply)
-        return
-    for position, (repository, number) in enumerate(batch):
-        connection = dig(reply.data, f"f{position}", "pullRequest", "files")
-        if connection is None:
-            repository.documentation_failed = True
-            report(state.problems, cfg, _files_what([repository]), reply)
-            continue
-        if _read_files(repository, connection):
-            continue
-        cursor = page_cursor(connection)
-        if cursor:
-            await _more_files(cfg, reader, state, repository, number, cursor)
+            return
+        unread: list[tuple[int, str]] = []
+        for position, number in enumerate(batch):
+            alias = f"f{position}"
+            connection = dig(reply.data, alias, "pullRequest", "files")
+            if lost(state.problems, what, reply, connection, alias):
+                repository.documentation_failed = True
+                continue
+            if _read_files(repository, connection):
+                return
+            cursor = page_cursor(connection)
+            if cursor is not None:
+                unread.append((number, cursor))
+        if unread:
+            async with asyncio.TaskGroup() as group:
+                for number, cursor in unread:
+                    group.create_task(
+                        guard(
+                            state.problems, what, _more_files(cfg, reader, state, repository, number, cursor)
+                        )
+                    )
 
 
 def _read_files(repository: RepositoryState, connection: Any) -> bool:
     """The paths of one page of a pull request's files; true where the documentation mark is
-    settled, after which the rest of that pull request's files need not be read."""
+    settled, after which no further file of that repository need be read."""
     if facts.documentation(dig(entry, "path") for entry in nodes(connection)):
         repository.documentation_found = True
     return repository.documentation_found
@@ -729,6 +730,7 @@ async def _more_files(
     """The rest of one pull request's files, where it changes more than one page of them and none
     of that page was documentation."""
     call = problems.of_repository(f"the files of pull request {number}", repository.name)
+    what = f"whether the unreleased work of {repository.name} changes the documentation"
     next_cursor: str | None = cursor
     for page in range(2, PAGE_LIMIT + 1):
         reply = await reader.graphql(
@@ -744,34 +746,44 @@ async def _more_files(
             },
         )
         connection = dig(reply.data, "repository", "pullRequest", "files")
-        if connection is None:
+        if reply.failure is not None or connection is None:
             repository.documentation_failed = True
-            report(state.problems, cfg, _files_what([repository]), reply)
+            report(state.problems, cfg, what, reply)
             return
         if _read_files(repository, connection):
             return
         next_cursor = page_cursor(connection)
         if next_cursor is None:
             return
+    repository.documentation_failed = True
+    state.problems.append(problems.from_failure(what, too_long(call), cfg.time_zone))
 
 
 async def _dev_releases(cfg: Config, reader: Reader, state: FullState) -> None:
     """The dev releases, from GHCR alone (R9): the organisation's container packages, then the
     versions of each, among which a version tagged `dev` carries its dev version in the tag
-    beside it (R3). A package belongs to the repository its `repository.full_name` names."""
+    beside it (R3). A package belongs to the repository its `repository.full_name` names.
+
+    Every repository whose packages are still being read is pending until the last of them has
+    answered, so that a dev release read in part is not published as the whole of it (R11).
+    """
     packages, failure = await reader.rest_list(
         problems.PACKAGES, f"/orgs/{cfg.github_org}/packages", {"package_type": "container"}
     )
     if failure is not None:
         state.problems.append(problems.from_failure("the dev releases", failure, cfg.time_zone))
         return
+    belongs: list[tuple[str, str]] = []
+    for package in packages:
+        name, repository = facts.package_name(package), facts.repository_of(package)
+        if name is None or repository is None:
+            logger.warning("a container package names no repository and belongs to none")
+            continue
+        belongs.append((name, repository))
+        state.dev_pending[repository] = state.dev_pending.get(repository, 0) + 1
     state.dev_versions = {}
     async with asyncio.TaskGroup() as group:
-        for package in packages:
-            name, repository = facts.package_name(package), facts.repository_of(package)
-            if name is None or repository is None:
-                logger.warning("a container package names no repository and belongs to none")
-                continue
+        for name, repository in belongs:
             what = f"the dev release of {repository}"
             group.create_task(
                 guard(state.problems, what, _package_versions(cfg, reader, state, name, repository))
@@ -781,16 +793,32 @@ async def _dev_releases(cfg: Config, reader: Reader, state: FullState) -> None:
 async def _package_versions(
     cfg: Config, reader: Reader, state: FullState, package: str, repository: str
 ) -> None:
+    """One package's versions, read page by page only as far as the dev release needs.
+
+    GHCR lists a package's versions newest first, so the first page holding a version tagged `dev`
+    holds the newest dev release and the rest of the list says nothing the page shows.
+    """
     path = f"/orgs/{cfg.github_org}/packages/container/{quote(package, safe='')}/versions"
     call = f"the versions of the package {package}"
-    versions, failure = await reader.rest_list(call, path)
-    if failure is not None:
+    what = f"the dev release of {repository}"
+    found: list[str] = []
+    failed = False
+    for number in range(1, PAGE_LIMIT + 1):
+        reply = await reader.rest(problems.page(call, number), path, {"per_page": REST_PAGE, "page": number})
+        listed = reply.data if isinstance(reply.data, list) else None
+        if reply.failure is not None or listed is None:
+            report(state.problems, cfg, what, reply)
+            failed = True
+            break
+        for entry in listed:
+            found.extend(facts.dev_versions(facts.container_tags(entry)))
+        if found or len(listed) < REST_PAGE:
+            break
+        if number == PAGE_LIMIT:
+            state.problems.append(problems.from_failure(what, too_long(call), cfg.time_zone))
+            failed = True
+    if failed:
         state.dev_failures.add(repository)
-        state.problems.append(
-            problems.from_failure(f"the dev release of {repository}", failure, cfg.time_zone)
-        )
-        return
-    published = [version for entry in versions for version in facts.dev_versions(facts.container_tags(entry))]
-    if state.dev_versions is None:
-        state.dev_versions = {}
-    state.dev_versions.setdefault(repository, []).extend(published)
+    elif state.dev_versions is not None:
+        state.dev_versions.setdefault(repository, []).extend(found)
+    state.dev_pending[repository] = max(0, state.dev_pending.get(repository, 0) - 1)

@@ -29,6 +29,8 @@ from tests.gh_fakes import (
     FakeAnswer,
     FakeGitHub,
     FakeOrganisation,
+    FakePackage,
+    FakeRepository,
     forbidden,
     graphql_error,
     malformed,
@@ -148,7 +150,6 @@ async def test_a_second_read_that_fails_leaves_that_status_not_gathered(
     assert isinstance(quarry.pull_requests, Gathered)
     statuses = {pull.number: pull.status for pull in quarry.pull_requests.value}
     assert statuses[11] == NOT_GATHERED
-    assert statuses[12] == NOT_GATHERED
     assert isinstance(statuses[13], Gathered)
     gh_problem(snapshot.problems, "the status of")
 
@@ -481,3 +482,231 @@ async def test_a_graphql_call_refused_for_a_secondary_rate_limit_says_so(
     assert (
         problem.why == f"GitHub's rate limit is spent; the budget resets at {reset_time(gh_config.time_zone)}"
     )
+
+
+# R11: a fact still being read when the wait runs out is not gathered, not published part-read.
+
+
+async def test_a_list_still_being_read_when_the_wait_runs_out_is_not_gathered(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    """The tags and branches of a repository whose lists ran past the first page: the first page had
+    arrived, the rest had not, and the newest tag is of the whole list or of none."""
+    fake = FakeGitHub(organisation=gh_organisation, page_cap=2, delays={queries.REFS_OPERATION: 0.5})
+    cfg = hurried(gh_config)
+    async with default_http_client(cfg, transport=fake.transport()) as client:
+        snapshot = await gather(cfg, client)
+    assert not snapshot.completed
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.newest_tag == NOT_GATHERED
+    assert atlas.working_branches == NOT_GATHERED
+    assert atlas.open_issues == Gathered(3)
+    problem = gh_problem(snapshot.problems, "the facts GitHub had not yet given")
+    assert any("the tags of" in detail.call for detail in problem.details)
+
+
+async def test_open_pull_requests_still_being_read_when_the_wait_runs_out_are_not_gathered(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    fake = FakeGitHub(
+        organisation=gh_organisation,
+        page_cap=1,
+        delays={queries.REPOSITORY_PULL_REQUESTS_OPERATION: 0.5},
+    )
+    cfg = hurried(gh_config)
+    async with default_http_client(cfg, transport=fake.transport()) as client:
+        snapshot = await gather(cfg, client)
+    assert gh_found(snapshot, "atlas").pull_requests == NOT_GATHERED
+
+
+async def test_the_unreleased_count_is_not_gathered_whilst_its_commits_are_still_being_read(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    """The comparison had answered and what its commits belong to had not: the count is of every
+    commit or of none, whilst the pending back-merge the same answer gave stands."""
+    fake = FakeGitHub(organisation=gh_organisation, delays={queries.COMMIT_PULL_REQUESTS_OPERATION: 0.5})
+    cfg = hurried(gh_config)
+    async with default_http_client(cfg, transport=fake.transport()) as client:
+        snapshot = await gather(cfg, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == NOT_GATHERED
+    assert atlas.unreleased.documentation == NOT_GATHERED
+    assert atlas.readiness == NOT_GATHERED
+    assert atlas.back_merge_pending == Gathered(False)
+
+
+async def test_the_documentation_mark_is_not_gathered_whilst_the_files_are_still_being_read(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    """The count had been made and the files had not: the mark waits on them, the count does not."""
+    fake = FakeGitHub(organisation=gh_organisation, delays={queries.FILES_OPERATION: 0.5})
+    cfg = hurried(gh_config)
+    async with default_http_client(cfg, transport=fake.transport()) as client:
+        snapshot = await gather(cfg, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == Gathered(1)
+    assert atlas.unreleased.documentation == NOT_GATHERED
+
+
+async def test_a_dev_release_is_not_gathered_whilst_its_packages_are_still_being_read(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    """The list of packages had arrived and one repository's versions had not; a repository with two
+    packages waits for both."""
+    fake = FakeGitHub(organisation=gh_organisation, delays={f"{VERSIONS}:fieldwork-worker": 0.5})
+    cfg = hurried(gh_config)
+    async with default_http_client(cfg, transport=fake.transport()) as client:
+        snapshot = await gather(cfg, client)
+    assert gh_found(snapshot, "fieldwork").dev_release == NOT_GATHERED
+    assert gh_found(snapshot, "atlas").dev_release == Gathered(None)
+
+
+async def test_the_archived_count_is_not_given_where_the_list_was_not_read_to_its_end(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    """A count of some of the pages is no count; the repositories that did arrive stand (R11)."""
+    fake = FakeGitHub(organisation=gh_organisation, page_cap=2)
+    failure = server_error()
+    failure.after = 1
+    fake.failures[queries.REPOSITORIES_OPERATION] = failure
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    assert snapshot.archived is None
+    assert len(snapshot.repositories) == 2
+    gh_problem(snapshot.problems, "the repositories GitHub had not yet listed")
+
+
+# An error beside the data: the targets it names are lost and the rest of the answer stands.
+
+
+async def test_an_error_on_one_commit_costs_that_repositorys_count_alone(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    gh_github.errors[queries.COMMIT_PULL_REQUESTS_OPERATION] = [
+        {"message": "Could not resolve to a Commit", "path": ["r0", "c1"]}
+    ]
+    snapshot = await gather(gh_config, gh_client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == NOT_GATHERED
+    assert atlas.back_merge_pending == Gathered(False)
+    gh_problem(snapshot.problems, f"the unreleased work of {ORGANISATION}/atlas")
+
+
+async def test_an_error_on_one_pull_requests_files_costs_the_mark_alone(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    gh_github.errors[queries.FILES_OPERATION] = [{"message": "Something went wrong", "path": ["f0"]}]
+    snapshot = await gather(gh_config, gh_client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == Gathered(1)
+    assert atlas.unreleased.documentation == NOT_GATHERED
+    gh_problem(snapshot.problems, "changes the documentation")
+
+
+async def test_an_error_on_one_status_costs_that_status_alone(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    gh_github.errors[queries.STATUSES_OPERATION] = [{"message": "Something went wrong", "path": ["s0"]}]
+    snapshot = await gather(gh_config, gh_client)
+    quarry = gh_found(snapshot, "quarry")
+    assert isinstance(quarry.pull_requests, Gathered)
+    statuses = {pull.number: pull.status for pull in quarry.pull_requests.value}
+    assert statuses[11] == NOT_GATHERED
+    assert isinstance(statuses[13], Gathered)
+    gh_problem(snapshot.problems, "the status of")
+
+
+async def test_an_error_beside_a_continuation_leaves_the_list_not_gathered(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    fake = FakeGitHub(organisation=gh_organisation, page_cap=2)
+    fake.errors[queries.REFS_OPERATION] = [{"message": "Something went wrong"}]
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.newest_tag == NOT_GATHERED
+    assert atlas.working_branches == NOT_GATHERED
+    gh_problem(snapshot.problems, f"the newest tag of {ORGANISATION}/atlas")
+
+
+async def test_an_error_beside_a_page_of_files_leaves_the_mark_not_gathered(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    fake = FakeGitHub(organisation=gh_organisation, page_cap=1)
+    fake.errors[queries.FILES_PAGE_OPERATION] = [{"message": "Something went wrong"}]
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == Gathered(1)
+    assert atlas.unreleased.documentation == NOT_GATHERED
+
+
+async def test_an_error_beside_the_search_leaves_the_tab_with_no_list(
+    gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
+) -> None:
+    gh_github.errors[queries.OPEN_PULL_REQUESTS_OPERATION] = [{"message": "Something went wrong"}]
+    snapshot = await gather_pull_requests(gh_config, gh_client)
+    assert snapshot.pull_requests == NOT_GATHERED
+    problem = gh_problem(snapshot.problems, "the open pull requests")
+    assert problem.why == "GitHub answered with an error"
+
+
+# A list that runs past the pages one gather reads, and a comparison that does not say how long it is.
+
+
+async def test_a_list_longer_than_one_gather_reads_is_not_gathered(gh_config: Config) -> None:
+    """Twenty-five pages of tags at one tag a page: the newest tag is of the whole list or of none."""
+    organisation = FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(FakeRepository(name="atlas", tags=tuple(f"v0.{minor}.0" for minor in range(25))),),
+    )
+    fake = FakeGitHub(organisation=organisation, page_cap=1)
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.newest_tag == NOT_GATHERED
+    problem = gh_problem(snapshot.problems, f"the newest tag of {ORGANISATION}/atlas")
+    assert problem.why == "GitHub's list is longer than one gather reads"
+
+
+async def test_a_packages_versions_longer_than_one_gather_reads_leave_no_dev_release(
+    gh_config: Config,
+) -> None:
+    versions = tuple((f"sha-{index}",) for index in range(2001))
+    organisation = FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(FakeRepository(name="atlas", tags=("v1.0.0",), latest_release="v1.0.0"),),
+        packages=(FakePackage(name="atlas", repository=f"{ORGANISATION}/atlas", versions=versions),),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    assert gh_found(snapshot, "atlas").dev_release == NOT_GATHERED
+    problem = gh_problem(snapshot.problems, f"the dev release of {ORGANISATION}/atlas")
+    assert problem.why == "GitHub's list is longer than one gather reads"
+
+
+async def test_a_comparison_that_does_not_say_how_long_it_is_cannot_be_counted(
+    gh_config: Config, gh_organisation: FakeOrganisation
+) -> None:
+    organisation = replace(
+        gh_organisation,
+        repositories=tuple(
+            replace(repository, ahead_total_absent=True) if repository.name == "atlas" else repository
+            for repository in gh_organisation.repositories
+        ),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == NOT_GATHERED
+    assert atlas.back_merge_pending == Gathered(False)
+    problem = gh_problem(snapshot.problems, f"the unreleased work of {ORGANISATION}/atlas")
+    assert problem.why == "GitHub answered without it"

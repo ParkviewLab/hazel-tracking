@@ -25,7 +25,7 @@ from tests.gh_fakes import (
     FakeRepository,
     server_error,
 )
-from tests.gh_fixtures import ORGANISATION, gh_problem
+from tests.gh_fixtures import ORGANISATION, gh_problem, gh_uncomputed
 
 
 def listed(gathered: Fact[tuple[OpenPullRequest, ...]]) -> list[tuple[str, int]]:
@@ -104,8 +104,20 @@ async def test_a_status_github_had_not_computed_is_read_once_more(
     assert isinstance(snapshot.pull_requests, Gathered)
     statuses = {one.pull_request.number: one.pull_request.status for one in snapshot.pull_requests.value}
     assert statuses[11] == Gathered(PullRequestStatus.READY)
-    assert statuses[12] == NOT_GATHERED
     assert gh_github.asked(queries.STATUSES_OPERATION) == 1
+    assert snapshot.problems == ()
+
+
+async def test_a_status_still_uncomputed_at_the_second_read_is_a_problem_of_its_own(
+    gh_config: Config,
+) -> None:
+    fake = FakeGitHub(organisation=gh_uncomputed())
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather_pull_requests(gh_config, client)
+    assert isinstance(snapshot.pull_requests, Gathered)
+    assert snapshot.pull_requests.value[0].pull_request.status == NOT_GATHERED
+    problem = gh_problem(snapshot.problems, f"the status of {ORGANISATION}/quarry#12")
+    assert problem.why == "GitHub had not computed it, asked a second time"
 
 
 async def test_the_search_is_read_to_its_end(gh_config: Config, gh_organisation: FakeOrganisation) -> None:

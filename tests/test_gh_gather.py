@@ -34,9 +34,11 @@ from tests.gh_fakes import (
     FakeGitHub,
     FakeOrganisation,
     FakePackage,
+    FakePullRequest,
     FakeRepository,
+    server_error,
 )
-from tests.gh_fixtures import ORGANISATION, gh_found
+from tests.gh_fixtures import ORGANISATION, gh_found, gh_problem, gh_uncomputed
 
 
 async def test_a_gather_that_wants_nothing_is_whole(gh_config: Config, gh_client: httpx.AsyncClient) -> None:
@@ -213,12 +215,29 @@ async def test_a_repository_with_no_package_has_no_dev_release(
 async def test_a_status_github_had_not_computed_is_read_once_more(
     gh_config: Config, gh_client: httpx.AsyncClient, gh_github: FakeGitHub
 ) -> None:
-    quarry = gh_found(await gather(gh_config, gh_client), "quarry")
+    snapshot = await gather(gh_config, gh_client)
+    quarry = gh_found(snapshot, "quarry")
     assert isinstance(quarry.pull_requests, Gathered)
     statuses = {pull.number: pull.status for pull in quarry.pull_requests.value}
     assert statuses[11] == Gathered(PullRequestStatus.READY)
-    assert statuses[12] == NOT_GATHERED
     assert gh_github.asked(queries.STATUSES_OPERATION) == 1
+    assert snapshot.problems == ()
+
+
+async def test_a_status_still_uncomputed_at_the_second_read_is_a_problem_of_its_own(
+    gh_config: Config,
+) -> None:
+    """Not gathered, and said so: a gather holding one is not wholly successful, so the page tries
+    again rather than leaving the status grey until the next half hour (R4, R8)."""
+    fake = FakeGitHub(organisation=gh_uncomputed())
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    quarry = gh_found(snapshot, "quarry")
+    assert isinstance(quarry.pull_requests, Gathered)
+    assert quarry.pull_requests.value[0].status == NOT_GATHERED
+    assert fake.asked(queries.STATUSES_OPERATION) == 1
+    problem = gh_problem(snapshot.problems, f"the status of {ORGANISATION}/quarry#12")
+    assert problem.why == "GitHub had not computed it, asked a second time"
 
 
 async def test_no_second_read_is_sent_where_github_computed_every_status(gh_config: Config) -> None:
@@ -302,7 +321,8 @@ async def test_the_comparisons_are_read_over_rest_and_the_commits_over_graphql(
     await gather(gh_config, gh_client)
     assert gh_github.asked("compare:atlas") == 4  # its trunks and its three working branches
     assert gh_github.asked("compare:cedar") == 1  # one trunk, so its branch alone is compared
-    assert gh_github.asked(queries.COMMIT_PULL_REQUESTS_OPERATION) == 1
+    # Each repository's commits are read on its own, so the two with unreleased work make two calls.
+    assert gh_github.asked(queries.COMMIT_PULL_REQUESTS_OPERATION) == 2
 
 
 async def test_a_comparison_longer_than_one_page_is_read_to_its_end(gh_config: Config) -> None:
@@ -346,3 +366,126 @@ async def test_a_compared_commit_the_repository_will_not_resolve_greys_the_count
     assert atlas.unreleased.pull_requests == NOT_GATHERED
     assert atlas.back_merge_pending == Gathered(False)
     assert gh_found(snapshot, "brightwork.example").unreleased is not None
+
+
+async def test_only_a_v_major_minor_patch_tag_is_the_newest_tag(
+    gh_config: Config, gh_client: httpx.AsyncClient
+) -> None:
+    """atlas is tagged `v0.11.0rc1` and `0.12.0` beside its versions; neither is a final version."""
+    assert gh_found(await gather(gh_config, gh_client), "atlas").newest_tag == Gathered("v0.10.0")
+
+
+async def test_a_branch_carries_only_a_pull_request_from_that_branch_of_this_repository(
+    gh_config: Config,
+) -> None:
+    """A fork's branch of the same name is another branch; where two pull requests are open from one
+    branch of this repository, the branch carries the lower number."""
+    organisation = FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(
+            FakeRepository(
+                name="atlas",
+                branches=("feature-charts", "feature-maps"),
+                history={"develop": (FakeCommit("d1", "SUCCESS"),), "main": (FakeCommit("m1", "SUCCESS"),)},
+                pulls=(
+                    FakePullRequest(number=9, head="feature-charts", title="feat: the charts again"),
+                    FakePullRequest(number=5, head="feature-charts", title="feat: the charts"),
+                    FakePullRequest(
+                        number=7,
+                        head="feature-maps",
+                        title="feat: the maps, from a fork",
+                        head_repository="Someone/atlas",
+                    ),
+                ),
+                branch_behind={"feature-charts": 1, "feature-maps": 2},
+            ),
+        ),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert isinstance(atlas.working_branches, Gathered)
+    branches = {branch.name: branch.pull_request for branch in atlas.working_branches.value}
+    assert branches["feature-charts"] == Gathered(
+        PullRequestRef(number=5, url=f"https://github.com/{ORGANISATION}/atlas/pull/5")
+    )
+    assert branches["feature-maps"] == Gathered(None)
+    assert isinstance(atlas.pull_requests, Gathered)
+    assert {pull.number for pull in atlas.pull_requests.value} == {5, 7, 9}
+
+
+async def test_a_documentation_mark_one_pull_request_proved_stands_whatever_became_of_the_others(
+    gh_config: Config,
+) -> None:
+    """The files of the first pull request were lost and the second's changed the documentation: the
+    mark is true, since no further file could make it false."""
+    organisation = FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(
+            FakeRepository(
+                name="atlas",
+                tags=("v1.0.0",),
+                latest_release="v1.0.0",
+                history={"develop": (FakeCommit("d1", "SUCCESS"),), "main": (FakeCommit("m1", "SUCCESS"),)},
+                ahead=(
+                    FakeCommit("a1", pulls=(FakeAssociated(7, "feature-tables"),)),
+                    FakeCommit("a2", pulls=(FakeAssociated(8, "doc-guide"),)),
+                ),
+                files={7: ("src/atlas/core.py",), 8: ("docs/guide.md",)},
+            ),
+        ),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    fake.errors[queries.FILES_OPERATION] = [{"message": "Something went wrong", "path": ["f0"]}]
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == Gathered(2)
+    assert atlas.unreleased.documentation == Gathered(True)
+
+
+async def test_a_packages_versions_are_read_only_as_far_as_the_dev_release_needs(
+    gh_config: Config,
+) -> None:
+    """GHCR lists a package's versions newest first, so the page holding the first version tagged
+    `dev` holds the newest dev release and the rest of the list says nothing the page shows."""
+    versions = [("dev", "2.0.0.dev7")] + [(f"sha-{index}",) for index in range(150)]
+    organisation = FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(FakeRepository(name="atlas", tags=("v1.0.0",), latest_release="v1.0.0"),),
+        packages=(FakePackage(name="atlas", repository=f"{ORGANISATION}/atlas", versions=tuple(versions)),),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    beyond = server_error()
+    beyond.after = 1
+    fake.failures["versions:atlas"] = beyond
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    assert gh_found(snapshot, "atlas").dev_release == Gathered(DevRelease(version="2.0.0.dev7"))
+    assert fake.asked("versions:atlas") == 1
+    assert snapshot.problems == ()
+
+
+async def test_a_count_is_of_every_commit_of_the_comparison_or_of_none(gh_config: Config) -> None:
+    """Sixty commits, read in two queries of which the second fails: the count is not gathered rather
+    than counted from the batch that answered."""
+    ahead = tuple(
+        FakeCommit(f"c{index}", pulls=(FakeAssociated(7 + index, f"feature-{index}"),)) for index in range(60)
+    )
+    organisation = FakeOrganisation(
+        login=ORGANISATION,
+        repositories=(FakeRepository(name="atlas", tags=("v1.0.0",), latest_release="v1.0.0", ahead=ahead),),
+    )
+    fake = FakeGitHub(organisation=organisation)
+    second = server_error()
+    second.after = 1
+    fake.failures[queries.COMMIT_PULL_REQUESTS_OPERATION] = second
+    async with default_http_client(gh_config, transport=fake.transport()) as client:
+        snapshot = await gather(gh_config, client)
+    atlas = gh_found(snapshot, "atlas")
+    assert atlas.unreleased is not None
+    assert atlas.unreleased.pull_requests == NOT_GATHERED
+    assert atlas.unreleased.documentation == NOT_GATHERED
+    assert fake.asked(queries.COMMIT_PULL_REQUESTS_OPERATION) == 2

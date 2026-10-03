@@ -66,6 +66,7 @@ _PULL_REQUEST_FACTS = """fragment PullRequestFacts on PullRequest {
   mergeStateStatus
   baseRefName
   headRefName
+  headRepository { nameWithOwner }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }"""
 

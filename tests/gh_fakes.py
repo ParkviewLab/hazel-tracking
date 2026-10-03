@@ -68,12 +68,15 @@ class FakeCommit:
 @dataclass(frozen=True)
 class FakePullRequest:
     """An open pull request. `uncomputed_reads` is how many reads answer `UNKNOWN` before GitHub
-    has computed the status, which is what R4's second read is tested against."""
+    has computed the status, which is what R4's second read is tested against; `head_repository` is
+    the repository the head branch is in, another name than the base repository's where the pull
+    request comes from a fork."""
 
     number: int
     head: str
     title: str = "a pull request"
     base: str | None = None
+    head_repository: str | None = None
     draft: bool = False
     mergeable: str = "MERGEABLE"
     state: str = "CLEAN"
@@ -90,7 +93,8 @@ class FakeRepository:
     `ahead_missing` are oids the comparison lists and the repository will not resolve, as happens
     where a branch is rewritten between the two calls. `ahead_total` is the number GitHub reports
     where it will not list them all, the 250 of its comparison: where it is set, the comparison
-    says it is longer than the commits it gives.
+    says it is longer than the commits it gives; `ahead_total_absent` leaves that number out of the
+    answer altogether.
     `files` are the paths each merged pull request changed. `missing` names a ref GitHub answers
     with a null, as it does for a branch deleted between two calls.
     """
@@ -108,6 +112,7 @@ class FakeRepository:
     ahead: Sequence[FakeCommit] = ()
     ahead_missing: Sequence[str] = ()
     ahead_total: int | None = None
+    ahead_total_absent: bool = False
     behind: int = 0
     branch_behind: Mapping[str, int] = field(default_factory=dict)
     files: Mapping[int, Sequence[str]] = field(default_factory=dict)
@@ -341,6 +346,7 @@ class FakeGitHub:
             "mergeStateStatus": "UNKNOWN" if uncomputed else pull.state,
             "baseRefName": pull.base or repository.default_branch,
             "headRefName": pull.head,
+            "headRepository": {"nameWithOwner": pull.head_repository or self._full_name(repository)},
             "commits": {
                 "nodes": [
                     {"commit": {"statusCheckRollup": {"state": pull.rollup} if pull.rollup else None}},
@@ -517,16 +523,16 @@ class FakeGitHub:
         listed = [{"sha": commit.oid} for commit in repository.ahead]
         listed += [{"sha": oid} for oid in repository.ahead_missing]
         total = repository.ahead_total if repository.ahead_total is not None else len(listed)
-        return FakeAnswer(
-            status=200,
-            payload={
-                "status": "ahead" if listed else "identical",
-                "ahead_by": total,
-                "behind_by": repository.behind,
-                "total_commits": total,
-                "commits": self._rest_page(listed, request),
-            },
-        )
+        payload: dict[str, Any] = {
+            "status": "ahead" if listed else "identical",
+            "ahead_by": total,
+            "behind_by": repository.behind,
+            "total_commits": total,
+            "commits": self._rest_page(listed, request),
+        }
+        if repository.ahead_total_absent:
+            del payload["total_commits"]
+        return FakeAnswer(status=200, payload=payload)
 
     def _packages(self, request: httpx.Request) -> list[dict[str, Any]]:
         listed = [
