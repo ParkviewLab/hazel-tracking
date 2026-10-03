@@ -16,9 +16,9 @@ To let one person see, in a single browser window and without searching, what is
 
 ## Intents
 
-1. The overview: what needs attention, at a glance. One screen, with no scrolling and nothing to click through, shows what is waiting on the reader and the release state of every repository; once the Atlas groups the repositories, one screen per grouping.
+1. The overview: what needs attention, at a glance. One screen, with no scrolling and nothing to click through, shows what is waiting on the reader and the release state of every repository; once the Atlas generator groups the repositories into projects, one screen per grouping.
 2. The detail: everything, for every repository. Every fact the Dashboard gathers, for every repository, in one table as wide as the window, growing in height with the number of repositories.
-3. The pull requests: the work arriving. Every open pull request awaiting a merge, each linked to it, with its own refresh that gathers the pull requests alone, cheap enough to repeat as often as new work is expected.
+3. The pull requests: the work arriving. Every open pull request into the integration trunks except the back-merges of releases, each linked to it, with its own refresh that gathers the pull requests alone, cheap enough to repeat as often as new work is expected, and a watch the reader starts that repeats it for a few minutes and marks the arrival or departure of a pull request.
 
 ### How the intents reinforce each other
 
@@ -27,7 +27,7 @@ The overview can leave detail out because the detail view holds it, and the deta
 ## Axioms
 
 1. Report, do not judge. Each fact is shown as its source states it; a roll-up, such as "ready to cut a release", follows a written rule and names the condition that fails.
-2. Gather on request, store nothing: the page is gathered from its sources when it is opened or refreshed, and nothing is held beyond the open page, so what it shows is what the sources said at the time it names; no database, no cache, no history.
+2. Gather on request, store nothing: the page is gathered from its sources when it is opened or refreshed, and refreshes itself on a written schedule while it is open; nothing is held beyond the open page, so what it shows is what the sources said at the time it names; no database, no cache, no history.
 3. Never write to a source.
 4. Show what is unknown: data that could not be gathered is greyed out, and the status bar says why.
 5. One window wide: a view wider than the window is a defect; the overview fits one screen, and the other views grow in height only as their contents grow.
