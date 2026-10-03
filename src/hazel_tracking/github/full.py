@@ -244,6 +244,11 @@ async def _repositories(cfg: Config, reader: Reader, state: FullState) -> None:
             report(state.problems, cfg, what, reply)
         if connection is None:
             return
+        if not isinstance(dig(connection, "nodes"), list):
+            # The one loss that is total: without this list there is no repository to show at all,
+            # so an answer whose shape cannot be read is reported rather than read as empty.
+            report(state.problems, cfg, "every repository's facts", Reply(call=call))
+            return
         if state.archived is None:
             state.archived = 0
         for node in nodes(connection):
