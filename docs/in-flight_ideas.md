@@ -14,6 +14,10 @@ Scratchpad for ideas under consideration: questions, not commitments (see the ha
 
 The page reads GitHub alone, so a dev release published only to TestPyPI or npm is not read ([`what-it-shows.md`](what-it-shows.md#dev-release), R9); none existed on 18 September 2026. Whether to read such releases once a repository publishes one.
 
+### Repositories shown in the Atlas's groupings
+
+The page fits the browser window's width, and its height grows with the number of repositories, so a larger organisation means scrolling (ruled 2026-10-03). The Atlas generator, a proposal in BookStack (the book "Atlas generator"), groups repositories into the projects they form, a repository belonging to more than one group where it does. Whether the page should show the repositories in those groupings, one tab per grouping, so that each tab fits the window and the reader moves through the groupings by tab. It depends on the Atlas generator being built and its groupings being readable by the Dashboard.
+
 ### The later phases
 
 This version shows only what GitHub supplies for the organisation's repositories. The later phases, which would add BookStack's tangents and proposals, the lab's services, the development server's info service, the storage server and the development machines, and the phase in which `garycoding/Development-Lab` joins, are a proposal in BookStack, in the book "The Dashboard". Their order is not ruled.
