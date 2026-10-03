@@ -9,10 +9,14 @@ as R4 reads it, and a Watch of its own, which waits for that pull request and
 stops also when its status changes (docs/what-it-shows.md, "The pull requests").
 
 This view is built from elements rather than from markup, because every line
-carries a button; the detail and the overview, which carry none, are markup. The
-list is rebuilt in place on every gather, the watch's included, and the lines are
-flex rows rather than a table so that an element and a fragment of markup can
-stand side by side in one line.
+carries a button; the detail and the overview, which carry none, are markup. It
+is the same table all the same, with the same stylesheet, so that its columns
+align down the list as the detail's do and the Watch of every line stands in one
+column at the right: the cells are built as elements, and a fragment of markup
+and a button stand side by side within them. The table is as wide as the tab and
+its columns are fixed, so that a long title wraps within its own column rather
+than pushing the ones beside it. It is rebuilt in place on every gather, the
+watch's included.
 
 Every fragment is put on the page unsanitised, every value in it having been
 escaped in `cells`, because the sanitiser drops the `target` of a link: with it,
@@ -32,6 +36,7 @@ from hazel_tracking.ui import cells, text
 type Key = tuple[str, int]
 
 COLUMNS = (("Repository", "repo"), ("Pull request", "title"), ("Status", "status"), ("", "watch"))
+TABLE_CLASSES = "sheet prlist"
 WATCH = "Watch"
 WATCHING = "Watching"
 GATHERING = "Gathering from GitHub…"
@@ -79,24 +84,30 @@ class PullRequestsList:
             if not snapshot.pull_requests.value:
                 ui.label(NONE_OPEN).classes("sub").style("padding:8px 10px").mark("pull-requests-empty")
                 return
-            self._header()
-            for open_pull_request in snapshot.pull_requests.value:
-                self._row(open_pull_request, watching)
+            with ui.element("table").classes(TABLE_CLASSES).mark("pull-requests-table"):
+                self._header()
+                with ui.element("tbody"):
+                    for open_pull_request in snapshot.pull_requests.value:
+                        self._row(open_pull_request, watching)
 
     def _header(self) -> None:
-        with ui.element("div").classes("prhead"):
+        with ui.element("thead"), ui.element("tr"):
             for name, column in COLUMNS:
-                ui.html(cells.escape(name), sanitize=False).classes(f"prcell-{column}")
+                with ui.element("th").classes(f"prcol-{column}"):
+                    ui.html(cells.escape(name), sanitize=False)
 
     def _row(self, open_pull_request: OpenPullRequest, watching: Key | None) -> None:
         key = key_of(open_pull_request)
-        with ui.element("div").classes("prrow"):
-            ui.html(cells.escape(cells.short_name(open_pull_request.repository)), sanitize=False).classes(
-                "prcell-repo sub"
-            )
-            ui.html(title_html(open_pull_request), sanitize=False).classes("prcell-title")
-            ui.html(status_html(open_pull_request), sanitize=False).classes("prcell-status")
-            with ui.element("div").classes("prcell-watch"):
+        with ui.element("tr"):
+            with ui.element("td").classes("prcol-repo"):
+                ui.html(cells.escape(cells.short_name(open_pull_request.repository)), sanitize=False).classes(
+                    "sub"
+                )
+            with ui.element("td").classes("prcol-title"):
+                ui.html(title_html(open_pull_request), sanitize=False)
+            with ui.element("td").classes("prcol-status"):
+                ui.html(status_html(open_pull_request), sanitize=False)
+            with ui.element("td").classes("prcol-watch"):
                 ui.button(
                     WATCHING if watching == key else WATCH,
                     on_click=lambda _=None, chosen=key: self._on_watch(chosen),

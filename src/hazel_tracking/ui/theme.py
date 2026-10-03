@@ -155,18 +155,17 @@ td.repo a:hover, a.plain:hover {{ text-decoration:underline; }}
 .problem-what {{ color:var(--text); font-weight:600; font-size:13px; }}
 .problem-why {{ color:var(--text); font-size:13px; }}
 .problem-detail {{ color:var(--muted); font-size:12px; }}
-/* The pull requests: flex lines, so that a button stands in a line beside markup. */
-.prhead, .prrow {{ display:flex; align-items:baseline; gap:10px;
-  padding:4px 10px; border-bottom:1px solid var(--line); }}
-.prhead {{ position:sticky; top:0; z-index:1; background:var(--bg);
-  font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }}
-.prcell-repo {{ flex:0 0 190px; }}
-.prcell-title {{ flex:1 1 auto; min-width:0; white-space:normal; }}
-.prcell-status {{ flex:0 0 160px; }}
-.prcell-watch {{ flex:0 0 100px; text-align:right; }}
+/* The pull requests are the detail's table again, as wide as the tab, its columns fixed so that
+   every line's Watch stands in one column at the right however long the title beside it is. */
+table.sheet.prlist {{ table-layout:fixed; }}
+table.sheet.prlist td {{ vertical-align:baseline; }}
+table.sheet.prlist .prcol-repo {{ width:200px; }}
+table.sheet.prlist .prcol-title {{ width:auto; white-space:normal; word-break:break-word; }}
+table.sheet.prlist .prcol-status {{ width:170px; }}
+table.sheet.prlist .prcol-watch {{ width:110px; text-align:right; }}
 /* A line's own Watch is small, but no type on the page goes under 12 px, so its size is set
    here rather than taken from the button's own `size` property. */
-.prcell-watch .q-btn {{ font-size:12px; min-height:22px; padding:0 8px; }}
+.prcol-watch .q-btn {{ font-size:12px; min-height:22px; padding:0 8px; }}
 
 .wrap {{ white-space:normal; }}
 .tabbar {{ border-bottom:1px solid var(--line); }}
