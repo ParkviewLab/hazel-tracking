@@ -8,7 +8,7 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 
 This is the record of hazel-tracking's decisions: dated entries that describe what was decided and why, kept as history. Entries stand in the order they were made, newest last, and an entry is not rewritten when a later decision changes it; the later entry records the change. Each entry names the decision, the reason as it was recorded, and the alternatives set aside; where the record gives no reason or names no alternative, the entry says so rather than supplying one.
 
-The entries from the first to the open-issue count record the rulings on the Dashboard's requirements and design that Phase 1 embodies. D1 to D10 record the rulings on the decisions of the Phase 1 plan, with R12 and R13, the plan's readings of the dev builds; the readings R1 to R11 are in [`what-it-shows.md`](what-it-shows.md), which specifies the page. Questions still open are in [`in-flight_ideas.md`](in-flight_ideas.md).
+The entries from the first to the open-issue count record the rulings on the Dashboard's requirements and design that Phase 1 embodies. D1 to D10 record the rulings on the decisions of the Phase 1 plan, with R12 and R13, the plan's readings of the dev builds; the readings R1 to R11 are in [`what-it-shows.md`](what-it-shows.md), which specifies the page. The entries of 2026-10-03 record the rulings made when Phase 1 was compared with prima-dev-dashboard, a local build of Phase 1 used daily as the reference for its behaviour and its page, and when the repository was brought to handbook v2.1.1. Questions still open are in [`in-flight_ideas.md`](in-flight_ideas.md).
 
 ## 2026-09-17: a service that stores nothing and gathers on request
 
@@ -112,6 +112,82 @@ Decided: hazel-tracking is built on the handbook release that carries the fix ch
 ## 2026-09-18: D10, the token
 
 Decided: a classic GitHub token with `read:packages` alone, the only kind GitHub's Packages API accepts, created and stored on 18 September 2026 in the lab's secrets store as `GITHUB_TOKEN_HAZEL_TRACKING`; the service reads the environment variable of that name. It was verified that day without being displayed: its scopes are `read:packages` only; it expires on 2027-09-18; it reads the organisation's 16 repositories and its 9 container packages; a write is refused. Reason: every repository of the organisation is public, so the token reads every repository, as the scope requires, and it is read-only, as the design rules; a private repository would be absent without notice, a limit [`what-it-shows.md`](what-it-shows.md#scope) states. Set aside: none recorded.
+
+## 2026-10-03: the handbook v2.1.1 conventions
+
+Decided: the repository is brought to handbook v2.1.1 and dev-tools v1.5.3 before its first pull request merges. `release.yml` and `dev-release.yml` are assembled by dev-tools' `assemble-workflows`, declared in `.github/workflows/.assembly.toml`, with no difference from the parts; the dev version is the parts' own (the newest `v*` tag raised by `kind`, or the version file's version while there is no tag, with N the run number times 100 plus its attempt), which replaces R12's N and the changes listed under D5. The version guard is the v2.1.1 template. git-cliff, `cliff.toml` and `scripts/generate_changelog.py` give way to dev-tools' shared `generate-changelog`. Pull requests are merged with merge commits, and a release ends with `git back-merge`. `pyproject.toml` declares 0.1.0, where the templates start, so that the first release is `git release` alone. Reason: D9's condition is met by the releases since v0.25.0, which carry the one-changelog-generator and real-merges builds. Set aside: discarding the scaffold and starting again, since its stack and contract match the rulings below.
+
+## 2026-10-03: gathering on each page load, and nothing kept
+
+Decided: each page load gathers, and nothing is kept, as the 2026-09-17 entry rules. Reason: it is the northstar's intent, and frequent fresh reads of the pull requests were wanted. Set aside: prima-dev-dashboard's single loop that gathers every 30 minutes and serves every page from the snapshot it keeps.
+
+## 2026-10-03: GraphQL
+
+Decided: GitHub is read through GraphQL, with REST for the container packages. Reason: about twice as fast on every page load (4 to 6 s measured on 2026-09-18, against prima-dev-dashboard's 11.1 s over REST on 2026-10-03), and it reads facts REST makes awkward. Set aside: REST alone, as prima-dev-dashboard reads, about 116 requests a gather.
+
+## 2026-10-03: the wait stays 15 seconds
+
+Decided: D7's wait of 15 s stands, a setting of the stack. Reason: it leaves room for a slow answer without a long wait when GitHub is in trouble. Set aside: prima-dev-dashboard's 30 s.
+
+## 2026-10-03: the 30-minute cycle and the retries
+
+Decided: the automatic gather runs every 30 minutes, in place of every ten minutes. After a gather that is not wholly successful (not complete within the wait, or complete with any call failed), the page tries again after 1 minute, and after each further attempt that is not wholly successful, after twice the previous delay: 1, 2, 4, 8 and 16 minutes; the 32-minute retry is not made, and the 30-minute cycle resumes. Any wholly successful gather, Refresh's or a page load's included, ends the retries and restarts the cycle. A gather not complete within the wait shows what arrived and greys the rest (R11, unchanged). This amends D7's retry every minute and the ten-minute cycle of 2026-09-18. Reason: a fresh gather is always to hand by reloading the page or pressing Refresh. Set aside: a retry every minute until a gather completes.
+
+## 2026-10-03: readiness leaves out back-merge pull requests
+
+Decided: readiness and unreleased work follow R5 and R6, and a merged pull request whose branch name begins `back-merge-` is not unreleased work. Reason: every release leaves `develop` ahead of `main` by its back-merge pull request and the commit that opens the next dev cycle, so that without the exclusion every repository reads ready to cut the moment it is released; `git back-merge` always names its branch so. Set aside: prima-dev-dashboard's rule, ready whenever `develop` is ahead of `main`.
+
+## 2026-10-03: checks on both trunks
+
+Decided: the Checks column shows both trunks, each at its newest commit that has checks, passing over a `[skip ci]` head (R2). Reason: `main` is where releases are cut, and its head after every release is the changelog commit made with `[skip ci]`. Set aside: the default branch's head alone.
+
+## 2026-10-03: the six pull-request statuses
+
+Decided: R4's six statuses. Reason: GitHub's "blocked" covers both checks still running and a branch behind its base, which call for different actions. Set aside: prima-dev-dashboard's draft, conflicts, checks failing, blocked, pending, ready.
+
+## 2026-10-03: a branch's open pull request, linked
+
+Decided: each working branch shows its lag and, where a pull request is open from it, that pull request's number, linked to it; a branch with none carries no mark. "A branch pushed with no pull request" is no longer among what waits on the reader. Reason: branches are created on GitHub first and pushed throughout the work, so a branch with no pull request is work in progress. Set aside: marking a branch that has no open pull request, ruled earlier the same day and reversed.
+
+## 2026-10-03: dev releases from GHCR alone
+
+Decided: Phase 1 reads dev releases from GHCR alone; installer dev builds are an in-flight idea. Reason: no installer dev build had ever been run, and reading them is a large share of the gathering. Set aside: the plan's reading of installer dev builds from workflow runs, with their expiry.
+
+## 2026-10-03: the status bar, the dialog and the endpoints
+
+Decided: problems are reported by one status sentence and an information icon that opens a dialog of every problem's detail; the status bar also gives GitHub's rate limit remaining and its reset, and the count of archived repositories not shown. The endpoints are `/`, `/health` and `/admin/version`. Reason: a bad gather can yield many problems, which listed beneath the table would push it off the screen. Set aside: prima-dev-dashboard's list of problems beneath the table, and its `GET /api/state`.
+
+## 2026-10-03: the chrome
+
+Decided: the ParkviewLab logo at the left, "ParkviewLab Engineering Dashboard" with the service's version, and Michroma vendored in the image, never fetched; the logo and the font are vendored from the handbook's brand as paper-boxing has them, outside the repository's dual licence. Reason: the logo and the version as prima-dev-dashboard shows them, and no request outside the network on each load. Set aside: the name "Prima Dev Dashboard", and the font fetched from Google Fonts.
+
+## 2026-10-03: two of the columns
+
+Decided: the heading "Tag / Release" for the final release, and the last push shown as the time since it up to 36 hours and as the date after that. Reason: the cell shows the tag and the Release both, and a relative time reads faster in a column scanned for recent activity. Set aside: "Final release", and the time of the last push in the lab's time zone.
+
+## 2026-10-03: D8 amended, the width
+
+Decided: the page fits the width of 1470 CSS pixels with no type under 12 px; its height grows with the number of repositories, and it scrolls. Reason: the height depends on how many repositories the organisation has. Set aside: the whole page within 1470 by 800.
+
+## 2026-10-03: three tabs
+
+Decided: the page has three tabs, Overview, Detail and Pull requests, under one chrome; switching tabs gathers nothing; the overview is distilled from the detail's gather; Refresh sits above the tabs. The overview fits one screen and shows per repository the release state, readiness and what waits on the reader; the detail scrolls within its tab. The northstar is amended the same day to three intents, one per tab. Reason: two needs pull in different directions, one screen of what needs attention and every fact for every repository, and the open pull requests are watched on their own. Set aside: three separate addresses, each gathering what it shows.
+
+## 2026-10-03: the pull-requests tab, its Refresh and its Watch
+
+Decided: the tab lists every open pull request into a repository's integration trunk except those from `back-merge-` branches, Dependabot's included. It is gathered by one GraphQL search, which cost 1 point and took 0.6 to 0.7 s when measured on 2026-10-03 (the same facts read repository by repository cost 51 points). The tab has its own Refresh and a Watch that gathers every 10 seconds and stops on a new or closed pull request, after 10 minutes, on leaving the tab or on closing the page, marking the browser tab's title when it stops on a change. Reason: prima-dev-dashboard's PRs button was pressed often while an agent was about to open a pull request; a cheap gather keeps that within GitHub's hourly budget. Set aside: the PRs button on the main table, a refresh every 30 seconds while the tab is shown (too slow), and one every 10 seconds at all times (too costly).
+
+## 2026-10-03: the busy spinner
+
+Decided: a large busy spinner is overlaid on the page while any gather runs; the page is drawn first and filled when the gather returns. Reason: each page load waits for a gather. Set aside: holding the response until the gather returns.
+
+## 2026-10-03: the port inside the container
+
+Decided: 35850 inside the container as well as outside. Reason: the port in a health check, a log line or `/admin/version` is the one opened in the browser. Set aside: prima-dev-dashboard's 8000 inside, published as 35850.
+
+## 2026-10-03: the deployment
+
+Decided: a Portainer stack on the development server, with a dev build tried there first (D5); prima-dev-dashboard keeps running until the release there is verified. Reason: the development server is where the lab's services run, backed up and documented, reachable from any machine on the development network. Set aside: Docker on the Mac, as prima-dev-dashboard runs.
 
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>

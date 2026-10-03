@@ -10,9 +10,13 @@ Scratchpad for ideas under consideration: questions, not commitments (see the ha
 
 ## Open
 
+### Installer dev builds
+
+Dev releases are read from GHCR alone ([`what-it-shows.md`](what-it-shows.md#dev), R9). An Electron app's dev build keeps its installers as the artefacts of a dev workflow's run, in the `installers` job that conception-space and pensa-grex carry; neither had run it by 3 October 2026. Whether to read such builds (the workflow's latest successful run, the version at that commit, and the artefacts, marked when they have expired) once one is cut.
+
 ### Dev releases published only to TestPyPI or npm
 
-The page reads GitHub alone, so a dev release published only to TestPyPI or npm is not read ([`what-it-shows.md`](what-it-shows.md#dev-release), R9); none existed on 18 September 2026. Whether to read such releases once a repository publishes one.
+The page reads GitHub alone, so a dev release published only to TestPyPI or npm is not read ([`what-it-shows.md`](what-it-shows.md#dev), R9); none existed on 18 September 2026. Whether to read such releases once a repository publishes one.
 
 ### Repositories shown in the Atlas's groupings
 

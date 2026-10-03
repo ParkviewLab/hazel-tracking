@@ -6,11 +6,11 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 
 # hazel-tracking
 
-The ParkviewLab Engineering Dashboard: one page, served on the development network, showing the present state of every ParkviewLab repository, gathered from GitHub each time it is shown and stored nowhere.
+The ParkviewLab Engineering Dashboard: one page, served on the development network, showing the present state of every ParkviewLab repository in three tabs (an overview, the detail and the open pull requests), gathered from GitHub each time it is opened or refreshed and stored nowhere.
 
 ## Status
 
-Unreleased; `develop` carries 0.1.0.dev0. This version is the scaffold: the package, the contract between the gathering and the page ([`src/hazel_tracking/model.py`](src/hazel_tracking/model.py)), the image, the stack and the workflows. Its page at `/` shows the display name alone and gathers nothing.
+Unreleased; `develop` declares 0.1.0, the first release. This version is the scaffold: the package, the contract between the gathering and the page ([`src/hazel_tracking/model.py`](src/hazel_tracking/model.py)) with the overview derived from it ([`src/hazel_tracking/overview.py`](src/hazel_tracking/overview.py)), the image, the stack and the workflows. Its page at `/` shows the display name alone and gathers nothing.
 
 What the page shows is specified in [`docs/what-it-shows.md`](docs/what-it-shows.md), the repository's authority for it. The record of decisions is [`docs/decisions.md`](docs/decisions.md), and the intent [`docs/northstar.md`](docs/northstar.md).
 
