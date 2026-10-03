@@ -11,8 +11,10 @@ R1 to R6 rule (`facts`), the wording of a problem (`problems`), the full gather'
 collection (`full`) and the gather of the open pull requests alone
 (`pull_requests`). Nothing here reaches back into the page.
 
-The division of labour between GitHub's two interfaces follows the plan of
-2026-09-18: GraphQL for the repositories and their facts, which one query a page
-answers, and REST for the organisation's container packages and their versions,
-which GraphQL does not expose at all.
+The division of labour between GitHub's two interfaces has two reasons. GraphQL
+answers the repositories and their facts, a page of them to a query, and what the
+compared commits belong to. REST answers the organisation's container packages and
+their versions, which GraphQL does not expose at all, and the comparisons of two
+refs, whose counts GraphQL refuses to a token without the `repo` scope, which this
+token does not have and by ruling D10 must not have (docs/decisions.md, 2026-10-03).
 """

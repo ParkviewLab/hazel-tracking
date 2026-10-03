@@ -5,13 +5,13 @@
 """The gathering, from GitHub: the full snapshot of every repository of the organisation,
 and the open pull requests alone.
 
-`gather` and `gather_pull_requests` are the two entry points, and the only code
-that names GitHub's calls; each reads through the client it is given and returns
-the contract of `model.py`, per docs/what-it-shows.md. The calls themselves, their
-words and the readings they follow are in `hazel_tracking.github`; what is here is
-what both gathers share: the wait that bounds them (D7), the assembly of the
-snapshot from what arrived, and the one problem a gather not complete within the
-wait carries, naming each call still outstanding (R11).
+`gather` and `gather_pull_requests` are the two entry points the page awaits; each
+reads through the client it is given and returns the contract of `model.py`, per
+docs/what-it-shows.md. The calls themselves, their words and the readings they
+follow are in `hazel_tracking.github`, which is the only code that names GitHub's
+interfaces; what is here is what both gathers share: the wait that bounds them
+(D7), the assembly of the snapshot from what arrived, and the one problem a gather
+not complete within the wait carries, naming each call still outstanding (R11).
 
 Neither gather raises for a source that fails: a call that fails costs the facts it
 feeds and no others, which the snapshot carries as not gathered beside a problem

@@ -213,5 +213,9 @@ Decided: the northstar gains a fourth intent, "Safe to leave open" (every view r
 
 Decided: the status bar shows when the GitHub token expires, as GitHub's answers report it, in yellow within 30 days of its expiry; and a watch may be started from one pull request's row, stopping also when that pull request's status changes. Reason: an expired token would leave the whole page ungathered, and waiting for a pull request's checks is as common as waiting for a new pull request. Set aside: none recorded.
 
+## 2026-10-03: the comparisons are read over REST
+
+Decided: the trunk comparison of each repository and the lag of each working branch are read over REST's comparison of two commits, `GET /repos/{owner}/{repo}/compare/{base}...{head}`, and not over GraphQL's `Ref.compare`; what the compared commits belong to is still read over GraphQL, by the oids REST gives. Reason: GraphQL refuses `aheadBy`, `behindBy` and `status` to a token without the `repo` scope, and the Dashboard's token holds `read:packages` alone, by D10, so that it cannot write; the refusal came in the live gather of 3 October 2026, with status 200 and the message that the field requires the `repo` scope, and it cost the unreleased work, the readiness, the pending back-merge and every branch's lag in every repository. REST's comparison answers the same facts to the same token, which was checked the same day. Set aside: giving the token the `repo` scope, which would make it a token that can write, against the design.
+
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>
