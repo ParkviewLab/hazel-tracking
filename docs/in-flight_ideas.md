@@ -16,7 +16,7 @@ The page reads GitHub alone, so a dev release published only to TestPyPI or npm 
 
 ### Repositories shown in the Atlas's groupings
 
-The page fits the browser window's width, and its height grows with the number of repositories, so a larger organisation means scrolling (ruled 2026-10-03). The Atlas generator, a proposal in BookStack (the book "Atlas generator"), groups repositories into the projects they form, a repository belonging to more than one group where it does. Whether the page should show the repositories in those groupings, one tab per grouping, so that each tab fits the window and the reader moves through the groupings by tab. It depends on the Atlas generator being built and its groupings being readable by the Dashboard.
+The page fits the browser window's width, and its height grows with the number of repositories, so a larger organisation means scrolling (ruled 2026-10-03). The Atlas generator, a proposal in BookStack (the book "Atlas generator"), groups repositories into the projects they form, a repository belonging to more than one group where it does. Whether the page should show the repositories in those groupings, one tab per grouping, so that each tab fits the window and the reader moves through the groupings by tab, beside a tab that keeps every repository on one table. It depends on the Atlas generator being built and its groupings being readable by the Dashboard.
 
 ### The later phases
 
