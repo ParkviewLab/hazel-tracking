@@ -28,6 +28,20 @@ from nicegui import ui
 from hazel_tracking.config import Config
 
 
+def next_delay(cfg: Config, attempt: int, *, wholly_successful: bool) -> tuple[float, int]:
+    """How long after a gather began the next one falls due, and the attempt that follows it.
+
+    A wholly successful gather ends the retries and restarts the cycle. Otherwise the retries
+    run through `cfg.retry_delays_seconds` in turn; after the last of them the cycle resumes,
+    and a gather that is not wholly successful then begins the retries afresh.
+    """
+    if wholly_successful:
+        return cfg.gather_interval_seconds, 0
+    if attempt < len(cfg.retry_delays_seconds):
+        return cfg.retry_delays_seconds[attempt], attempt + 1
+    return cfg.gather_interval_seconds, 0
+
+
 class GatherSchedule:
     """The automatic full gather for one browser, as a one-shot timer that is re-set each time."""
 
@@ -57,16 +71,9 @@ class GatherSchedule:
         self._next_at = None
 
     def delay_after(self, *, wholly_successful: bool) -> float:
-        """How long after a gather began the next one falls due, and advance the retries."""
-        if wholly_successful:
-            self._attempt = 0
-            return self._cfg.gather_interval_seconds
-        if self._attempt < len(self._cfg.retry_delays_seconds):
-            delay = self._cfg.retry_delays_seconds[self._attempt]
-            self._attempt += 1
-            return delay
-        self._attempt = 0
-        return self._cfg.gather_interval_seconds
+        """The delay until the next gather, advancing the retries."""
+        delay, self._attempt = next_delay(self._cfg, self._attempt, wholly_successful=wholly_successful)
+        return delay
 
     def set_after(self, *, wholly_successful: bool, elapsed_seconds: float) -> None:
         """Set the timer for the next gather, `elapsed_seconds` after the one that just ended began."""

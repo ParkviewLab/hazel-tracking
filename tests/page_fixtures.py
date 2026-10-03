@@ -85,21 +85,16 @@ class Plan:
 
     def load(
         self,
-        snapshot: Snapshot | None = None,
+        snapshot: Snapshot | Iterable[Snapshot] | None = None,
         pull_requests: PullRequestsSnapshot | Iterable[PullRequestsSnapshot] | None = None,
     ) -> Plan:
-        """What the gathers are to answer: one snapshot, and one or a sequence of the other."""
+        """What the gathers are to answer: one snapshot each, or a sequence to be answered in turn."""
         if snapshot is not None:
-            self.snapshots = [snapshot]
+            self.snapshots = [snapshot] if isinstance(snapshot, Snapshot) else list(snapshot)
         if pull_requests is not None:
             self.pull_requests = (
                 [pull_requests] if isinstance(pull_requests, PullRequestsSnapshot) else list(pull_requests)
             )
-        return self
-
-    def then(self, snapshot: Snapshot) -> Plan:
-        """What the next full gather is to answer, after those already loaded."""
-        self.snapshots.append(snapshot)
         return self
 
     async def gather(self) -> Snapshot:
@@ -235,7 +230,7 @@ def everything_shown(user: User) -> str:
 async def open_page(
     user: User,
     plan: Plan,
-    snapshot: Snapshot | None = None,
+    snapshot: Snapshot | Iterable[Snapshot] | None = None,
     pull_requests: PullRequestsSnapshot | Iterable[PullRequestsSnapshot] | None = None,
 ) -> None:
     """Load the plan, open the page, and wait until both gathers have filled it."""
