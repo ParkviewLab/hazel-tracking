@@ -9,6 +9,10 @@ is rendered as markup rather than built from elements: a row holds ten cells and
 several of them hold a line apiece for every branch and every pull request, so
 one string per gather is both the cheapest thing to draw and the easiest to read
 in a test. It scrolls vertically within its tab; nothing is truncated or hidden.
+
+Two of the columns, the unreleased work and the release indicator, hold the longest
+words and may wrap, so that a browser narrows them before the table grows wider than
+the window; the rest stand on one line.
 """
 
 from __future__ import annotations
@@ -40,8 +44,8 @@ def row(repo: Repository, now: datetime) -> str:
         f"<td>{cells.issues_cell(repo)}</td>"
         f"<td>{cells.tag_release_cell(repo)}</td>"
         f"<td>{cells.dev_cell(repo)}</td>"
-        f"<td>{cells.unreleased_cell(repo)}</td>"
-        f"<td>{cells.readiness_cell(repo)}</td>"
+        f'<td class="wrap">{cells.unreleased_cell(repo)}</td>'
+        f'<td class="wrap">{cells.readiness_cell(repo)}</td>'
         f"<td>{cells.checks_cell(repo)}</td>"
         f"<td>{cells.branches_cell(repo)}</td>"
         f"<td>{cells.pull_requests_cell(repo)}</td>"

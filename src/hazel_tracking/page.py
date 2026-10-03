@@ -182,12 +182,12 @@ class Dashboard:
                 ui.space()
                 self._pull_requests_refresh = (
                     ui.button(REFRESH, on_click=self._refreshed_pull_requests)
-                    .props("dense no-caps outline")
+                    .props("dense no-caps outline color=accent")
                     .mark("pull-requests-refresh")
                 )
                 self._watch_button = (
                     ui.button(pull_requests_view.WATCH, on_click=self._watch_pressed)
-                    .props("dense no-caps outline")
+                    .props("dense no-caps outline color=accent")
                     .mark("watch")
                 )
             container = ui.column().classes("w-full no-wrap gap-0")
@@ -204,7 +204,7 @@ class Dashboard:
             )
             self._icon = (
                 ui.button(icon="info", on_click=self._open_dialog)
-                .props("flat dense round size=sm")
+                .props("flat dense round size=sm color=accent")
                 .mark("status-icon")
             )
             self._icon.set_visibility(False)

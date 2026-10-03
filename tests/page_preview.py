@@ -4,8 +4,8 @@
 
 """Serve one scenario on a local port, for a person to look at and to measure.
 
-    uv run python tests/page_preview.py live-like
-    uv run python tests/page_preview.py stress --port 35851
+    uv run python -m tests.page_preview live-like
+    uv run python -m tests.page_preview stress --port 35851
 
 It installs the page exactly as `__main__` does, with the two gathers answering
 from `tests/page_scenarios.py` instead of from GitHub, and it binds the loopback

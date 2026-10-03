@@ -91,4 +91,4 @@ class PullRequestsList:
                 ui.button(
                     WATCHING if watching == key else WATCH,
                     on_click=lambda _=None, chosen=key: self._on_watch(chosen),
-                ).props("flat dense no-caps size=sm").mark(f"watch-{key[0]}-{key[1]}")
+                ).props("flat dense no-caps size=sm color=accent").mark(f"watch-{key[0]}-{key[1]}")

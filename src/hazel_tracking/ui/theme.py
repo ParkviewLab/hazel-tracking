@@ -104,14 +104,16 @@ _STYLESHEET = """
   --sage:{sage}; --yellow:{yellow}; --red:{red};
   --teal-deep:{teal_deep}; --teal:{teal};
 }}
-body {{ background:var(--bg); color:var(--text);
+/* The ground is the page's own, not the dark theme's default, which is why the rule names the
+   class Quasar puts on the body as well. */
+body, body.body--dark {{ background:var(--bg) !important; color:var(--text);
   font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
 .nicegui-content {{ padding:0; gap:0; }}
 .brand-face {{ font-family:'Michroma',sans-serif; letter-spacing:.04em; }}
 
 /* The tabs fill what the chrome and the status bar leave, and each panel scrolls inside itself. */
 .q-tab-panels, .q-tab-panels > .q-panel-parent {{ height:100%; background:transparent; }}
-.q-tab-panel {{ padding:0; height:100%; overflow-y:auto; overflow-x:hidden; }}
+.q-tab-panel {{ padding:0; height:100%; overflow-y:auto; overflow-x:hidden; background:transparent; }}
 
 /* The three views share one table. */
 table.sheet {{ border-collapse:collapse; width:100%; table-layout:auto; }}
