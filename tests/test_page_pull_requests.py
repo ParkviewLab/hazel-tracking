@@ -18,6 +18,7 @@ from nicegui import ui
 from nicegui.testing import User
 
 from hazel_tracking.ui import theme
+from hazel_tracking.ui.pull_requests_view import COLUMNS, key_of
 from tests import page_scenarios as scenarios
 from tests.page_fixtures import Plan, content_of, open_page, until
 
@@ -122,7 +123,7 @@ async def test_a_line_s_own_watch_carries_no_type_under_twelve_pixels(user: User
     await open_tab(user, page_plan)
     (button,) = user.find(marker="watch-ParkviewLab/hazel-tracking-2").elements
     assert "size" not in button.props
-    assert ".prcell-watch .q-btn { font-size:12px;" in theme.stylesheet()
+    assert ".prcol-watch .q-btn { font-size:12px;" in theme.stylesheet()
 
 
 async def test_the_links_are_not_sanitised_so_that_they_open_beside_the_dashboard(
@@ -134,9 +135,44 @@ async def test_the_links_are_not_sanitised_so_that_they_open_beside_the_dashboar
     listed = [
         element
         for element in user.client.layout.descendants()
-        if isinstance(element, ui.html) and "prcell-title" in element.classes
+        if isinstance(element, ui.html) and _in_column(element, "title")
     ]
     assert listed
     for element in listed:
         assert element.props["sanitize"] is False
     assert [element for element in listed if 'target="_blank"' in element.content]
+
+
+def _in_column(element: ui.element, column: str) -> bool:
+    """Whether the element stands in the list's named column."""
+    return any(f"prcol-{column}" in ancestor.classes for ancestor in element.ancestors())
+
+
+async def test_the_list_is_one_table_as_wide_as_the_tab_with_the_watch_in_its_own_column(
+    user: User, page_plan: Plan
+) -> None:
+    """Every line's Watch stands in the same fixed column at the right, as the detail's columns
+    align: a table of fixed layout, every row four cells, the button always in the last."""
+    await open_tab(user, page_plan, pull_requests=scenarios.open_pull_requests())
+    (table,) = user.find(marker="pull-requests-table").elements
+    assert table.tag == "table"
+    assert "sheet" in table.classes and "prlist" in table.classes
+    rows = [element for element in table.descendants() if element.tag == "tr"]
+    assert len(rows) == len(scenarios.OPEN) + 1, "one header row and one row per pull request"
+    for row in rows:
+        columns = [child for child in row.descendants() if child.tag in ("td", "th")]
+        assert [name for _, name in COLUMNS] == [
+            class_name.removeprefix("prcol-")
+            for cell in columns
+            for class_name in cell.classes
+            if class_name.startswith("prcol-")
+        ]
+    for open_pull_request in scenarios.OPEN:
+        key = key_of(open_pull_request)
+        (button,) = user.find(marker=f"watch-{key[0]}-{key[1]}").elements
+        assert _in_column(button, "watch")
+    css = theme.stylesheet()
+    assert "table.sheet.prlist { table-layout:fixed; }" in css
+    assert "table.sheet.prlist .prcol-watch { width:110px; text-align:right; }" in css
+    assert "table.sheet.prlist .prcol-title { width:auto; white-space:normal;" in css
+    assert "table.sheet th" in css and "width:100%" in css
