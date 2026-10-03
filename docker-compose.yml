@@ -30,6 +30,6 @@ services:
       # The IANA time zone in which the page shows times, such as America/Los_Angeles.
       TZ: "${TZ:-UTC}"
     extra_hosts:
-      # Lets a consumer on the docker host reach the stack as host.docker.internal on Linux
-      # (it works out of the box on Mac and Windows).
+      # Lets the container reach the docker host as host.docker.internal on Linux (it works
+      # out of the box on Mac and Windows); the service itself reads only GitHub.
       - "host.docker.internal:host-gateway"

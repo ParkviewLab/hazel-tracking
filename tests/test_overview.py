@@ -34,9 +34,7 @@ def quiet_repository() -> Repository:
         newest_tag=Gathered("v0.1.3"),
         newest_release=Gathered("v0.1.3"),
         dev_release=Gathered(None),
-        readiness=Gathered(
-            Readiness(failing=frozenset({ReleaseCondition.NOTHING_TO_RELEASE}), documentation=False)
-        ),
+        readiness=Gathered(Readiness(failing=frozenset({ReleaseCondition.NOTHING_TO_RELEASE}))),
         back_merge_pending=Gathered(False),
         checks=(
             TrunkChecks(trunk="main", state=Gathered(CheckState.PASSING)),
@@ -56,10 +54,8 @@ def test_a_repository_with_nothing_waiting_is_quiet() -> None:
 
 def test_each_thing_that_waits_on_the_reader_makes_the_repository_waiting() -> None:
     quiet = quiet_repository()
-    ready = Readiness(failing=frozenset(), documentation=True)
-    pull = PullRequest(
-        number=9, title="feat: x", url=f"{URL}/pull/9", status=Gathered(PullRequestStatus.READY)
-    )
+    ready = Readiness(failing=frozenset())
+    pull = PullRequest(number=9, url=f"{URL}/pull/9", status=Gathered(PullRequestStatus.READY))
     for changed in (
         replace(quiet, readiness=Gathered(ready)),
         replace(quiet, back_merge_pending=Gathered(True)),
@@ -75,7 +71,7 @@ def test_each_thing_that_waits_on_the_reader_makes_the_repository_waiting() -> N
 def test_a_draft_or_a_running_pull_request_does_not_wait_on_the_reader() -> None:
     quiet = quiet_repository()
     pulls = tuple(
-        PullRequest(number=n, title="t", url=f"{URL}/pull/{n}", status=Gathered(s))
+        PullRequest(number=n, url=f"{URL}/pull/{n}", status=Gathered(s))
         for n, s in ((1, PullRequestStatus.DRAFT), (2, PullRequestStatus.CHECKS_RUNNING))
     )
     assert not overview_row(replace(quiet, pull_requests=Gathered(pulls))).waiting
@@ -95,8 +91,7 @@ def test_the_pull_requests_are_counted_by_the_statuses_that_call_for_the_reader(
         PullRequestStatus.DRAFT,
     )
     pulls = tuple(
-        PullRequest(number=n, title="t", url=f"{URL}/pull/{n}", status=Gathered(s))
-        for n, s in enumerate(statuses)
+        PullRequest(number=n, url=f"{URL}/pull/{n}", status=Gathered(s)) for n, s in enumerate(statuses)
     )
     row = overview_row(replace(quiet_repository(), pull_requests=Gathered(pulls)))
     assert row.pull_requests_waiting == Gathered(
@@ -150,3 +145,10 @@ def test_the_overview_has_a_row_per_repository_in_the_snapshot_s_order() -> None
     )
     assert [row.name for row in overview(snapshot)] == [r.name for r in repos]
     assert overview(snapshot)[1].readiness is None
+
+
+def test_a_pull_request_whose_status_was_not_gathered_is_shown_not_hidden() -> None:
+    pull = PullRequest(number=4, url=f"{URL}/pull/4", status=NOT_GATHERED)
+    row = overview_row(replace(quiet_repository(), pull_requests=Gathered((pull,))))
+    assert row.pull_requests_waiting == NOT_GATHERED
+    assert row.waiting

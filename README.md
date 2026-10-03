@@ -57,16 +57,16 @@ Tag-driven via the `Release` workflow on push of a `v*` tag. Use the [`ParkviewL
 git pull --ff-only                                # sync main
 git -C ../hazel-tracking-develop pull --ff-only   # sync develop: the merge below takes the local branch
 git merge --no-ff develop                         # promote develop to main; the merge commit is the release ledger entry
-git bump <patch|minor|major>                      # bumps pyproject.toml and commits "release vX.Y.Z"
+git bump <patch|minor|major|release>              # bumps pyproject.toml and commits "release vX.Y.Z"
 git release                                       # annotated tag vX.Y.Z from pyproject.toml
 git push --follow-tags                            # the tag push fires the workflow
 ```
 
 The first release has no `git bump`: `pyproject.toml` already declares 0.1.0, so `git release` tags it as it stands.
 
-The release's last step is `git back-merge`, which builds a pull request from `develop` that also opens the next development cycle in the same branch (`X.Y.(Z+1).dev0` in `pyproject.toml`), and merges it once `develop`'s required checks, the version guard's back-merge mode among them, have passed. See the handbook's [`releases.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/releases.md#the-releases-last-step-the-back-merge-pull-request).
+The release's last step is `git back-merge`, which builds the branch `back-merge-<tag>` from `develop` and `main`, adds to it the commit that opens the next development cycle (`X.Y.(Z+1).dev0` in `pyproject.toml`), opens a pull request from it into `develop`, and merges it once `develop`'s required checks, the version guard's back-merge mode among them, have passed. See the handbook's [`releases.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/releases.md#the-releases-last-step-the-back-merge-pull-request).
 
-The workflow runs a gate (the tag equals the version, which carries no dev marker; the tagged commit is reachable from `main`; the version is greater than the previous tag), then a `docker` job that builds and pushes the image for amd64 and arm64 with the `X.Y.Z`, `X.Y` and `latest` tags, then a `changelog` job that writes the new section of [`CHANGELOG.md`](CHANGELOG.md) (an LLM-written Highlights paragraph and dev-tools' [`generate-changelog`](https://github.com/ParkviewLab/dev-tools)'s categorized list of merged pull requests), commits it to `main`, and creates the GitHub Release. There is no PyPI publish.
+The workflow runs a gate (the tag equals the version, which carries no dev marker; the tagged commit is reachable from `main`; the version is greater than the previous tag), then a `docker` job that builds and pushes the image for amd64 and arm64 with the `X.Y.Z`, `X.Y` and `latest` tags, then a `changelog` job that writes the new section of `CHANGELOG.md`, which the first release creates (an LLM-written Highlights paragraph and dev-tools' [`generate-changelog`](https://github.com/ParkviewLab/dev-tools)'s categorized list of merged pull requests), commits it to `main`, and creates the GitHub Release. There is no PyPI publish.
 
 ### Dev builds
 

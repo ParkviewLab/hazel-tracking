@@ -6,9 +6,9 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 
 # hazel-tracking: decisions
 
-This is the record of hazel-tracking's decisions: dated entries that describe what was decided and why, kept as history. Entries stand in the order they were made, newest last, and an entry is not rewritten when a later decision changes it; the later entry records the change. Each entry names the decision, the reason as it was recorded, and the alternatives set aside; where the record gives no reason or names no alternative, the entry says so rather than supplying one.
+This is the record of hazel-tracking's decisions: dated entries that describe what was decided and why, kept as history. Entries stand in the order of their dates, oldest first, and an entry is not rewritten when a later decision changes it; the later entry records the change. Each entry names the decision, the reason as it was recorded, and the alternatives set aside; where the record gives no reason or names no alternative, the entry says so rather than supplying one.
 
-The entries from the first to the open-issue count record the rulings on the Dashboard's requirements and design that Phase 1 embodies. D1 to D10 record the rulings on the decisions of the Phase 1 plan, with R12 and R13, the plan's readings of the dev builds; the readings R1 to R11 are in [`what-it-shows.md`](what-it-shows.md), which specifies the page. The entries of 2026-10-03 record the rulings made when Phase 1 was compared with prima-dev-dashboard, a local build of Phase 1 used daily as the reference for its behaviour and its page, and when the repository was brought to handbook v2.1.1. Questions still open are in [`in-flight_ideas.md`](in-flight_ideas.md).
+The entries from the first to the open-issue count record the rulings on the Dashboard's requirements and design that Phase 1 embodies. D1 to D10 record the rulings on the decisions of the Phase 1 plan, with R12 and R13, the plan's readings of the dev builds; the readings R1 to R11 are in [`what-it-shows.md`](what-it-shows.md), which specifies the page. The entries of 2026-10-03 record the rulings made when Phase 1 was compared with prima-dev-dashboard, a local build of Phase 1 used daily as the reference for its behaviour and its page, and when the repository was brought to handbook v2.1.1. Where one of them accepted a recommendation, the reason recorded is the recommendation's. Questions still open are in [`in-flight_ideas.md`](in-flight_ideas.md).
 
 ## 2026-09-17: a service that stores nothing and gathers on request
 
@@ -115,7 +115,7 @@ Decided: a classic GitHub token with `read:packages` alone, the only kind GitHub
 
 ## 2026-10-03: the handbook v2.1.1 conventions
 
-Decided: the repository is brought to handbook v2.1.1 and dev-tools v1.5.3 before its first pull request merges. `release.yml` and `dev-release.yml` are assembled by dev-tools' `assemble-workflows`, declared in `.github/workflows/.assembly.toml`, with no difference from the parts; the dev version is the parts' own (the newest `v*` tag raised by `kind`, or the version file's version while there is no tag, with N the run number times 100 plus its attempt), which replaces R12's N and the changes listed under D5. The version guard is the v2.1.1 template. git-cliff, `cliff.toml` and `scripts/generate_changelog.py` give way to dev-tools' shared `generate-changelog`. Pull requests are merged with merge commits, and a release ends with `git back-merge`. `pyproject.toml` declares 0.1.0, where the templates start, so that the first release is `git release` alone. Reason: D9's condition is met by the releases since v0.25.0, which carry the one-changelog-generator and real-merges builds. Set aside: discarding the scaffold and starting again, since its stack and contract match the rulings below.
+Decided: the repository is brought to handbook v2.1.1 before its first pull request merges, with dev-tools v1.5.3's commands; the workflows pin dev-tools v1.5.1, the parts' own pin and the newest release that changed the scripts they run. `release.yml` and `dev-release.yml` are assembled by dev-tools' `assemble-workflows`, declared in `.github/workflows/.assembly.toml`, with no difference from the parts; the dev version is the parts' own (the newest `v*` tag raised by `kind`, or the version file's version while there is no tag, with N the run number times 100 plus its attempt), which replaces R12's N and the changes listed under D5. The version guard is the v2.1.1 template. git-cliff, `cliff.toml` and `scripts/generate_changelog.py` give way to dev-tools' shared `generate-changelog`. Pull requests are merged with merge commits, and a release ends with `git back-merge`. `pyproject.toml` declares 0.1.0, where the templates start, so that the first release is `git release` alone. Reason: D9's condition is met by the releases since v0.25.0, which carry the one-changelog-generator and real-merges builds. Set aside: discarding the scaffold and starting again, since its stack and contract match the rulings below.
 
 ## 2026-10-03: gathering on each page load, and nothing kept
 
@@ -131,7 +131,7 @@ Decided: D7's wait of 15 s stands, a setting of the stack. Reason: it leaves roo
 
 ## 2026-10-03: the 30-minute cycle and the retries
 
-Decided: the automatic gather runs every 30 minutes, in place of every ten minutes. After a gather that is not wholly successful (not complete within the wait, or complete with any call failed), the page tries again after 1 minute, and after each further attempt that is not wholly successful, after twice the previous delay: 1, 2, 4, 8 and 16 minutes; the 32-minute retry is not made, and the 30-minute cycle resumes. Any wholly successful gather, Refresh's or a page load's included, ends the retries and restarts the cycle. A gather not complete within the wait shows what arrived and greys the rest (R11, unchanged). This amends D7's retry every minute and the ten-minute cycle of 2026-09-18. Reason: a fresh gather is always to hand by reloading the page or pressing Refresh. Set aside: a retry every minute until a gather completes.
+Decided: the automatic gather runs every 30 minutes, in place of every ten minutes. After a gather that is not wholly successful (not complete within the wait, or complete with any call failed), the page tries again after 1 minute, and after each further attempt that is not wholly successful, after twice the previous delay: 1, 2, 4, 8 and 16 minutes; the 32-minute retry is not made, and the 30-minute cycle resumes. Any wholly successful gather, Refresh's or a page load's included, ends the retries and restarts the cycle. A gather not complete within the wait shows what arrived and greys the rest (R11, unchanged). This amends D7's retry every minute, the ten-minute cycle of 2026-09-18, and R8, under which a gather that completed within the wait counted as succeeded even when some of its calls failed. Reason: a fresh gather is always to hand by reloading the page or pressing Refresh. Set aside: a retry every minute until a gather completes.
 
 ## 2026-10-03: readiness leaves out back-merge pull requests
 
@@ -151,7 +151,7 @@ Decided: each working branch shows its lag and, where a pull request is open fro
 
 ## 2026-10-03: dev releases from GHCR alone
 
-Decided: Phase 1 reads dev releases from GHCR alone; installer dev builds are an in-flight idea. Reason: no installer dev build had ever been run, and reading them is a large share of the gathering. Set aside: the plan's reading of installer dev builds from workflow runs, with their expiry.
+Decided: Phase 1 reads dev releases from GHCR alone; installer dev builds are an in-flight idea. Reason: the `installers` job of the present `dev-release.yml`, which conception-space and pensa-grex carry, had never run (conception-space's last installer dev build, from its earlier `dev-release-electron.yml`, ran on 2026-07-20 and is older than its release), and reading such builds is a large share of the gathering. Set aside: the plan's reading of installer dev builds from workflow runs, with their expiry.
 
 ## 2026-10-03: the status bar, the dialog and the endpoints
 
@@ -188,6 +188,14 @@ Decided: 35850 inside the container as well as outside. Reason: the port in a he
 ## 2026-10-03: the deployment
 
 Decided: a Portainer stack on the development server, with a dev build tried there first (D5); prima-dev-dashboard keeps running until the release there is verified. Reason: the development server is where the lab's services run, backed up and documented, reachable from any machine on the development network. Set aside: Docker on the Mac, as prima-dev-dashboard runs.
+
+## 2026-10-03: the northstar's three intents
+
+Decided: the northstar is amended to three intents, one per tab (the overview, the detail, the pull requests), with the trade-off between the overview and the detail stated; the former intents "True as of now" and "Private and read-only" become axioms 2 and 7, and once the Atlas generator groups the repositories, the overview gives one screen per grouping. Reason: the two needs and the third view, as the entry on the three tabs records. Set aside: the single intent "Everything at once", as first amended the same day for a page that grows in height.
+
+## 2026-10-03: links, and the elements one can use
+
+Decided: each repository's name and each pull request's number link to it on GitHub, as prima-dev-dashboard links them, and the interactive elements are the Refresh button, the three tabs, the pull-requests tab's Refresh and Watch, the information icon, and those links. This amends the 2026-09-18 entry under which the page was not interactive except for the Refresh button and the information icon. The pull-requests tab carries the time of its own gather beside the chrome's age of the full gather. Reason: the columns were taken as prima-dev-dashboard has them, and the pull-requests tab is gathered on its own. Set aside: none recorded.
 
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>

@@ -49,7 +49,8 @@ class OverviewRow:
     Release (R3). `failing_trunks` names each trunk whose checks fail; it is
     `NOT_GATHERED` where no trunk is known to fail and some trunk's checks were not
     gathered. `pull_requests_waiting` counts the open pull requests in each of
-    `WAITING_STATUSES`, every status listed, zero included. `waiting` is false only
+    `WAITING_STATUSES`, every status listed, zero included; it is `NOT_GATHERED`
+    where any open pull request's status was not gathered. `waiting` is false only
     when every fact is gathered and none calls for the reader.
     """
 
@@ -91,7 +92,10 @@ def failing_trunks(repo: Repository) -> Fact[tuple[str, ...]]:
 
 
 def pull_requests_waiting(repo: Repository) -> Fact[tuple[tuple[PullRequestStatus, int], ...]]:
+    """The counts by status; not gathered where the list, or any one pull request's status, was not."""
     if not isinstance(repo.pull_requests, Gathered):
+        return NOT_GATHERED
+    if any(isinstance(p.status, NotGathered) for p in repo.pull_requests.value):
         return NOT_GATHERED
     statuses = [p.status.value for p in repo.pull_requests.value if isinstance(p.status, Gathered)]
     return Gathered(tuple((s, statuses.count(s)) for s in WAITING_STATUSES))

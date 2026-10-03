@@ -5,8 +5,8 @@
 """hazel-tracking: the ParkviewLab Engineering Dashboard.
 
 One page, served on the development network, showing the present state of every
-repository of the ParkviewLab organisation, gathered from GitHub each time it
-is shown and stored nowhere. docs/what-it-shows.md specifies the page, and
+repository of the ParkviewLab organisation in three tabs, gathered from GitHub
+each time it is opened or refreshed and stored nowhere. docs/what-it-shows.md specifies the page, and
 `model.py` is the contract between the gathering and the page.
 """
 

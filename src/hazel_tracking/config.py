@@ -46,7 +46,7 @@ DEFAULT_TIME_ZONE = "UTC"
 GATHER_INTERVAL_SECONDS = 1800.0
 RETRY_DELAYS_SECONDS = (60.0, 120.0, 240.0, 480.0, 960.0)
 # The pull-requests tab's watch: a gather of the open pull requests every 10 s, for
-# at most 10 minutes (docs/what-it-shows.md, "The watch").
+# at most 10 minutes (docs/what-it-shows.md, "The pull requests").
 WATCH_INTERVAL_SECONDS = 10.0
 WATCH_LIMIT_SECONDS = 600.0
 

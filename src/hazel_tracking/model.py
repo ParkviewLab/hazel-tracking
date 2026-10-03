@@ -125,12 +125,11 @@ class Readiness:
     """Ready to cut a release, for a repository whose trunks are `main` and `develop` (R6).
 
     Ready when `failing` is empty; otherwise `failing` holds every condition that
-    fails. `documentation` says whether the unreleased work includes documentation,
-    which the indicator notes.
+    fails. Whether the unreleased work includes documentation, which the indicator
+    notes, is `Unreleased.documentation`, stated once.
     """
 
     failing: frozenset[ReleaseCondition]
-    documentation: bool
 
 
 @dataclass(frozen=True)
@@ -157,7 +156,6 @@ class PullRequest:
     """An open pull request (R4)."""
 
     number: int
-    title: str
     url: str
     status: Fact[PullRequestStatus]
 
@@ -249,10 +247,11 @@ class Snapshot:
 
 @dataclass(frozen=True)
 class OpenPullRequest:
-    """An open pull request on the pull-requests tab: its repository (`owner/name`) and the
-    pull request itself (R4)."""
+    """An open pull request on the pull-requests tab: its repository (`owner/name`), its
+    title, and the pull request itself (R4). The title is gathered for this tab alone."""
 
     repository: str
+    title: str
     pull_request: PullRequest
 
 

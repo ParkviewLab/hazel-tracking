@@ -42,9 +42,11 @@ uv sync
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run ty check
-uv run pytest -m "not network" -q
+uv run pytest -m "not network and not integration" -q
 uvx --from "reuse[charset-normalizer]" reuse lint
 ```
+
+CI also checks the licences of the dependencies (`license-check.yml`, job `licenses`); its command, with the list of licences it refuses, is in that workflow.
 
 CI also builds and runs the image (`test.yml`, job `image`). To run the same check locally:
 
@@ -57,7 +59,7 @@ curl -s http://127.0.0.1:35850/ | grep -c 'ParkviewLab Engineering Dashboard'
 docker rm -f hazel-tracking
 ```
 
-A PR can't be merged until the required checks pass: the workflows in [`.github/workflows/`](../.github/workflows/). Push after each commit. See also the handbook's [`python-tooling.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/python-tooling.md) and [`testing.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/testing.md).
+A PR can't be merged until the five required checks pass: `test` and `image` ([`test.yml`](../.github/workflows/test.yml)), `reuse`, `licenses` and `no-version-change`. Push after each commit. See also the handbook's [`python-tooling.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/python-tooling.md) and [`testing.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/testing.md).
 
 ## Versioning
 

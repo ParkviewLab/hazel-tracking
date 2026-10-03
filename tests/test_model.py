@@ -52,9 +52,7 @@ def develop_repository() -> Repository:
         newest_release=Gathered(None),
         dev_release=Gathered(DevRelease(version="0.1.1.dev701")),
         unreleased=Unreleased(pull_requests=Gathered(3), documentation=NOT_GATHERED),
-        readiness=Gathered(
-            Readiness(failing=frozenset({ReleaseCondition.CHECKS_FAILING}), documentation=True)
-        ),
+        readiness=Gathered(Readiness(failing=frozenset({ReleaseCondition.CHECKS_FAILING}))),
         back_merge_pending=Gathered(False),
         checks=(
             TrunkChecks(trunk="main", state=Gathered(CheckState.PASSING)),
@@ -74,11 +72,10 @@ def develop_repository() -> Repository:
             (
                 PullRequest(
                     number=2,
-                    title="feat: the page",
                     url=f"{URL}/pull/2",
                     status=Gathered(PullRequestStatus.CHECKS_RUNNING),
                 ),
-                PullRequest(number=3, title="docs: the record", url=f"{URL}/pull/3", status=NOT_GATHERED),
+                PullRequest(number=3, url=f"{URL}/pull/3", status=NOT_GATHERED),
             )
         ),
     )
@@ -203,9 +200,9 @@ def test_nothing_in_the_model_can_be_changed() -> None:
 
 
 def test_readiness_is_ready_when_no_condition_fails_and_names_every_one_that_does() -> None:
-    assert not Readiness(failing=frozenset(), documentation=False).failing
+    assert not Readiness(failing=frozenset()).failing
     every = frozenset(ReleaseCondition)
-    assert Readiness(failing=every, documentation=True).failing == every
+    assert Readiness(failing=every).failing == every
     assert [c.value for c in ReleaseCondition] == [
         "nothing to release",
         "checks failing on develop",
@@ -246,7 +243,11 @@ def test_the_pull_requests_snapshot_holds_each_open_pull_request_with_its_reposi
         duration_seconds=0.6,
         completed=True,
         pull_requests=Gathered(
-            (OpenPullRequest(repository="ParkviewLab/hazel-tracking", pull_request=first),)
+            (
+                OpenPullRequest(
+                    repository="ParkviewLab/hazel-tracking", title="feat: the page", pull_request=first
+                ),
+            )
         ),
         problems=(),
         rate_limit=RateLimit(remaining=4999, resets_at=BEGAN),

@@ -34,8 +34,8 @@ jobs:
       - name: Type check
         run: uv run ty check          # ty must be a dev dependency
 
-      - name: Tests (excluding network marker)
-        run: uv run pytest -m "not network" -q
+      - name: Tests (excluding the network and integration markers)
+        run: uv run pytest -m "not network and not integration" -q
 
   # The image built from this tree and run as the stack runs it, with a dummy token
   # and GitHub's API pointed at a closed local port, so that it reaches nothing: it
