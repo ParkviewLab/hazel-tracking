@@ -8,7 +8,7 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 
 ## What it is
 
-The ParkviewLab Engineering Dashboard: a page, served on the development server, showing the present state of every ParkviewLab repository, with a second page of their open pull requests alone, and in later phases the lab's services and development machines.
+The ParkviewLab Engineering Dashboard, served on the development server: three views of the present state of every ParkviewLab repository (an overview, the detail and the open pull requests), and in later phases the lab's services and development machines.
 
 ## Why it exists
 
@@ -16,22 +16,23 @@ To let one person see, in a single browser window and without searching, what is
 
 ## Intents
 
-1. Everything at once. Every project, and in time every service and machine, on one page as wide as one window, with nothing to click through to see a repository's state.
-2. True as of now. The page is gathered from its sources when it is requested and held nowhere, so what it shows is what the sources say at that moment, and what could not be gathered is shown as such.
-3. Private and read-only. It serves the development network alone, reads its sources without ever writing to them, and shows no secret.
+1. The overview: what needs attention, at a glance. One screen, with no scrolling and nothing to click through, shows what is waiting on the reader and the release state of every repository; once the Atlas groups the repositories, one screen per grouping.
+2. The detail: everything, for every repository. Every fact the Dashboard gathers, for every repository, in one table as wide as the window, growing in height with the number of repositories.
+3. The pull requests: the work arriving. Every open pull request awaiting a merge, each linked to it, cheap enough to reload as often as new work is expected.
 
 ### How the intents reinforce each other
 
-Gathering on request is what lets the Dashboard hold no data, so that it has nothing to protect beyond its credentials; and showing only the present, with no history, is what keeps everything to one page.
+The overview can leave detail out because the detail view holds it, and the detail view can grow because the overview stays on one screen; that is the trade-off between them, completeness given up on the overview to fit one screen, and fitting given up on the detail to show everything. The pull requests view gathers one thing, so it can be reloaded freely, and the full gather is spent only where the whole picture is needed.
 
 ## Axioms
 
 1. Report, do not judge. Each fact is shown as its source states it; a roll-up, such as "ready to cut a release", follows a written rule and names the condition that fails.
-2. Store nothing: no database, no cache, no history.
+2. Gather on request, store nothing: each view is gathered from its sources when it is requested and held nowhere, so what it shows is what the sources say at that moment; no database, no cache, no history.
 3. Never write to a source.
 4. Show what is unknown: data that could not be gathered is greyed out, and the status bar says why.
-5. One window wide: a page wider than the window is a defect; it grows in height only as the repositories grow in number.
+5. One window wide: a view wider than the window is a defect; the overview fits one screen, and the other views grow in height only as their contents grow.
 6. No secret on the page, anywhere.
+7. The development network alone: it serves nothing outside it.
 
 ## What hazel-tracking is not
 
