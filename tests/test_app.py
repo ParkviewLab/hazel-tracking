@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 
 """The app: its two ops endpoints, the token in neither, the page's `response_timeout`,
-and the seam through which `install()` binds the gathering to the page.
+and the seam through which `install()` binds the two gathers to the page.
 What the page shows is the page's own tests' to check."""
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from hazel_tracking import gather as gather_module
 from hazel_tracking import page as page_module
 from hazel_tracking.app import default_http_client, install
 from hazel_tracking.config import VERSION, Config
-from hazel_tracking.model import Gather, Snapshot
+from hazel_tracking.model import Gather, Gathered, GatherPullRequests, PullRequestsSnapshot, Snapshot
 
 
 def test_health_reports_the_version(app_client: TestClient) -> None:
@@ -73,15 +73,15 @@ def _registered_pages(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     return registered
 
 
-@pytest.mark.parametrize(("wait", "timeout"), [(15.0, 20.0), (7.5, 12.5)])
-def test_the_page_may_take_the_wait_and_five_seconds_to_build(
-    monkeypatch: pytest.MonkeyPatch, sentinel_token: str, wait: float, timeout: float
+def test_the_page_is_drawn_before_any_gather_and_keeps_nicegui_s_default_timeout(
+    monkeypatch: pytest.MonkeyPatch, sentinel_token: str
 ) -> None:
-    """NiceGUI's default `response_timeout` is 3 s; a gather may take the whole wait."""
+    """The page returns with its chrome and the spinner and is filled when the gather returns,
+    so a gather's length never counts against NiceGUI's `response_timeout`."""
     registered = _registered_pages(monkeypatch)
-    install(Config(github_token=sentinel_token, wait_seconds=wait))
+    install(Config(github_token=sentinel_token, wait_seconds=15.0))
     [dashboard] = [p for p in registered if p.path == "/"]
-    assert dashboard.response_timeout == timeout
+    assert dashboard.response_timeout == inspect.signature(ui.page).parameters["response_timeout"].default
 
 
 async def test_the_default_client_carries_the_token_in_the_authorization_header_alone(
@@ -108,28 +108,50 @@ def test_the_default_client_sends_no_authorization_without_a_token() -> None:
     assert "Authorization" not in request.headers
 
 
-async def test_install_binds_the_gathering_to_the_page_through_the_client_factory(
-    monkeypatch: pytest.MonkeyPatch, sentinel_token: str
-) -> None:
-    """The page receives a zero-argument gather; it opens a client from the factory, gives it to
-    `hazel_tracking.gather.gather` with the configuration, and closes it afterwards."""
-    cfg = Config(github_token=sentinel_token)
-    snapshot = Snapshot(
+def _snapshot() -> Snapshot:
+    return Snapshot(
         began_at=datetime(2026, 9, 18, tzinfo=UTC),
         duration_seconds=0.0,
         completed=True,
         sources=("GitHub",),
         repositories=(),
+        archived=0,
         problems=(),
+        rate_limit=None,
     )
-    bound: list[Gather] = []
-    calls: list[tuple[Config, httpx.AsyncClient]] = []
+
+
+def _pull_requests_snapshot() -> PullRequestsSnapshot:
+    return PullRequestsSnapshot(
+        began_at=datetime(2026, 9, 18, tzinfo=UTC),
+        duration_seconds=0.0,
+        completed=True,
+        pull_requests=Gathered(()),
+        problems=(),
+        rate_limit=None,
+    )
+
+
+async def test_install_binds_both_gathers_to_the_page_through_the_client_factory(
+    monkeypatch: pytest.MonkeyPatch, sentinel_token: str
+) -> None:
+    """The page receives two zero-argument gathers; each opens a client from the factory, gives it
+    to its function of `hazel_tracking.gather` with the configuration, and closes it afterwards."""
+    cfg = Config(github_token=sentinel_token)
+    snapshot, pull_requests = _snapshot(), _pull_requests_snapshot()
+    bound: list[tuple[Gather, GatherPullRequests]] = []
+    calls: list[tuple[str, Config, httpx.AsyncClient]] = []
     clients: list[httpx.AsyncClient] = []
 
     async def fake_gather(given: Config, client: httpx.AsyncClient) -> Snapshot:
-        calls.append((given, client))
+        calls.append(("gather", given, client))
         assert not client.is_closed
         return snapshot
+
+    async def fake_gather_pull_requests(given: Config, client: httpx.AsyncClient) -> PullRequestsSnapshot:
+        calls.append(("pull requests", given, client))
+        assert not client.is_closed
+        return pull_requests
 
     def factory() -> httpx.AsyncClient:
         client = default_http_client(cfg, transport=httpx.MockTransport(lambda _: httpx.Response(200)))
@@ -137,29 +159,43 @@ async def test_install_binds_the_gathering_to_the_page_through_the_client_factor
         return client
 
     monkeypatch.setattr(gather_module, "gather", fake_gather)
-    monkeypatch.setattr(page_module, "register", lambda _cfg, gather: bound.append(gather))
+    monkeypatch.setattr(gather_module, "gather_pull_requests", fake_gather_pull_requests)
+    monkeypatch.setattr(page_module, "register", lambda _cfg, g, p: bound.append((g, p)))
     install(cfg, http_client_factory=factory)
 
-    [page_gather] = bound
+    [(page_gather, page_gather_pull_requests)] = bound
     assert await page_gather() is snapshot
+    assert await page_gather_pull_requests() is pull_requests
     assert await page_gather() is snapshot
-    assert [given for given, _ in calls] == [cfg, cfg]
-    assert [client for _, client in calls] == clients
+    assert [(kind, given) for kind, given, _ in calls] == [
+        ("gather", cfg),
+        ("pull requests", cfg),
+        ("gather", cfg),
+    ]
+    assert [client for _, _, client in calls] == clients
     assert all(client.is_closed for client in clients)
 
 
-def test_a_gather_given_to_install_is_the_one_the_page_receives(monkeypatch: pytest.MonkeyPatch) -> None:
-    bound: list[Gather] = []
+def test_gathers_given_to_install_are_the_ones_the_page_receives(monkeypatch: pytest.MonkeyPatch) -> None:
+    bound: list[tuple[Gather, GatherPullRequests]] = []
 
     async def stub() -> Snapshot:
         raise AssertionError("not called here")
 
-    monkeypatch.setattr(page_module, "register", lambda _cfg, gather: bound.append(gather))
-    install(Config(), gather=stub)
-    assert bound == [stub]
+    async def stub_pull_requests() -> PullRequestsSnapshot:
+        raise AssertionError("not called here")
+
+    monkeypatch.setattr(page_module, "register", lambda _cfg, g, p: bound.append((g, p)))
+    install(Config(), gather=stub, gather_pull_requests=stub_pull_requests)
+    assert bound == [(stub, stub_pull_requests)]
 
 
-def test_the_gathering_s_entry_point_has_the_contract_s_signature() -> None:
-    assert inspect.iscoroutinefunction(gather_module.gather)
-    assert list(inspect.signature(gather_module.gather).parameters) == ["cfg", "client"]
-    assert app_module.install.__kwdefaults__ == {"gather": None, "http_client_factory": None}
+def test_the_gathering_s_entry_points_have_the_contract_s_signature() -> None:
+    for entry in (gather_module.gather, gather_module.gather_pull_requests):
+        assert inspect.iscoroutinefunction(entry)
+        assert list(inspect.signature(entry).parameters) == ["cfg", "client"]
+    assert app_module.install.__kwdefaults__ == {
+        "gather": None,
+        "gather_pull_requests": None,
+        "http_client_factory": None,
+    }

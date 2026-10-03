@@ -5,11 +5,12 @@
 """The NiceGUI application: the handbook's two ops endpoints, the page, `install()` and `run()`.
 
 `install()` registers everything on NiceGUI's app and is what `__main__` calls
-before `run()`; the tests call it too. It binds the gathering to the page: the
-page awaits a zero-argument `Gather`, which here opens one `httpx.AsyncClient`
-from `http_client_factory`, runs `hazel_tracking.gather.gather` with it and
-closes it. A test passes a stub `gather` for the page, or a factory whose
-client talks to a fake GitHub through an `httpx` transport.
+before `run()`; the tests call it too. It binds the two gathers to the page: the
+page awaits a zero-argument `Gather` for the full snapshot and a zero-argument
+`GatherPullRequests` for the open pull requests alone, each of which here opens
+one `httpx.AsyncClient` from `http_client_factory`, runs its function of
+`hazel_tracking.gather` with it and closes it. A test passes stubs for the page,
+or a factory whose client talks to a fake GitHub through an `httpx` transport.
 
 The token travels only in the client's `Authorization` header; neither endpoint
 reports it, and nothing here logs it.
@@ -27,7 +28,7 @@ from nicegui import app, ui
 from hazel_tracking import gather as gathering
 from hazel_tracking import page
 from hazel_tracking.config import DISPLAY_NAME, NAME, VERSION, Config
-from hazel_tracking.model import Gather, Snapshot
+from hazel_tracking.model import Gather, GatherPullRequests, PullRequestsSnapshot, Snapshot
 
 _started_at = time.monotonic()
 
@@ -95,25 +96,34 @@ def install(
     cfg: Config,
     *,
     gather: Gather | None = None,
+    gather_pull_requests: GatherPullRequests | None = None,
     http_client_factory: Callable[[], httpx.AsyncClient] | None = None,
 ) -> None:
     """Register the app on NiceGUI's app: the two ops endpoints and the page.
 
-    `gather` is what the page awaits for a snapshot; by default it is the gathering,
-    reading through a client from `http_client_factory`, whose default is
-    `default_http_client(cfg)`. A `gather` given here makes the factory unused.
+    `gather` and `gather_pull_requests` are what the page awaits for its two
+    snapshots; by default each is the gathering, reading through a client from
+    `http_client_factory`, whose default is `default_http_client(cfg)`. The
+    factory serves only the gathers not given here.
     """
+    factory = http_client_factory or (lambda: default_http_client(cfg))
     if gather is None:
-        factory = http_client_factory or (lambda: default_http_client(cfg))
 
         async def gather_snapshot() -> Snapshot:
             async with factory() as client:
                 return await gathering.gather(cfg, client)
 
         gather = gather_snapshot
+    if gather_pull_requests is None:
+
+        async def gather_open_pull_requests() -> PullRequestsSnapshot:
+            async with factory() as client:
+                return await gathering.gather_pull_requests(cfg, client)
+
+        gather_pull_requests = gather_open_pull_requests
 
     _register_routes(cfg)
-    page.register(cfg, gather)
+    page.register(cfg, gather, gather_pull_requests)
 
 
 def run(cfg: Config) -> None:

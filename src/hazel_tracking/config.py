@@ -40,11 +40,15 @@ DEFAULT_GITHUB_API_URL = "https://api.github.com"
 DEFAULT_WAIT_SECONDS = 15.0  # D7
 DEFAULT_TIME_ZONE = "UTC"
 
-# Ruled, not settings (docs/what-it-shows.md, R8): the next automatic gather falls due
-# ten minutes after the last gather began, or one minute after it began if it did not
-# complete within the wait.
-GATHER_INTERVAL_SECONDS = 600.0
-RETRY_INTERVAL_SECONDS = 60.0
+# Ruled, not settings (docs/what-it-shows.md, R8): the automatic gather runs every 30
+# minutes; after a gather that is not wholly successful, retries follow 1, 2, 4, 8 and
+# 16 minutes after each attempt, and then the 30-minute cycle resumes.
+GATHER_INTERVAL_SECONDS = 1800.0
+RETRY_DELAYS_SECONDS = (60.0, 120.0, 240.0, 480.0, 960.0)
+# The pull-requests tab's watch: a gather of the open pull requests every 10 s, for
+# at most 10 minutes (docs/what-it-shows.md, "The watch").
+WATCH_INTERVAL_SECONDS = 10.0
+WATCH_LIMIT_SECONDS = 600.0
 
 
 @dataclass(frozen=True)
@@ -59,7 +63,9 @@ class Config:
     wait_seconds: float = DEFAULT_WAIT_SECONDS
     time_zone: ZoneInfo = field(default_factory=lambda: ZoneInfo(DEFAULT_TIME_ZONE))
     gather_interval_seconds: float = GATHER_INTERVAL_SECONDS
-    retry_interval_seconds: float = RETRY_INTERVAL_SECONDS
+    retry_delays_seconds: tuple[float, ...] = RETRY_DELAYS_SECONDS
+    watch_interval_seconds: float = WATCH_INTERVAL_SECONDS
+    watch_limit_seconds: float = WATCH_LIMIT_SECONDS
 
     def __post_init__(self) -> None:
         """Refuse, at start, a configuration the service could not run under."""
@@ -67,8 +73,16 @@ class Config:
             raise ValueError(f"PORT must be between 1 and 65535, got {self.port}")
         if not _positive(self.wait_seconds):
             raise ValueError(f"HAZEL_TRACKING_WAIT_SECONDS must be greater than 0, got {self.wait_seconds}")
-        if not (_positive(self.gather_interval_seconds) and _positive(self.retry_interval_seconds)):
-            raise ValueError("the gather interval and the retry interval must be greater than 0")
+        intervals = (
+            self.gather_interval_seconds,
+            *self.retry_delays_seconds,
+            self.watch_interval_seconds,
+            self.watch_limit_seconds,
+        )
+        if not all(_positive(s) for s in intervals):
+            raise ValueError(
+                "the gather interval, the retry delays and the watch's intervals must be greater than 0"
+            )
 
 
 def _positive(seconds: float) -> bool:

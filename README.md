@@ -57,28 +57,30 @@ Tag-driven via the `Release` workflow on push of a `v*` tag. Use the [`ParkviewL
 git pull --ff-only                                # sync main
 git -C ../hazel-tracking-develop pull --ff-only   # sync develop: the merge below takes the local branch
 git merge --no-ff develop                         # promote develop to main; the merge commit is the release ledger entry
-git bump <patch|minor|major|release>              # sets the version in pyproject.toml and commits "release vX.Y.Z"
+git bump <patch|minor|major>                      # bumps pyproject.toml and commits "release vX.Y.Z"
 git release                                       # annotated tag vX.Y.Z from pyproject.toml
 git push --follow-tags                            # the tag push fires the workflow
 ```
 
-`git bump release` sets the version to the one `develop` declares, without its dev marker: 0.1.0 from 0.1.0.dev0. Once the workflow is green, the back-merge cascade brings `main`'s release and changelog commits down: `main` into `develop` with `--no-ff`, then `develop` into each open working branch, and `develop` opens the next development cycle (`X.Y.(Z+1).dev0` in `pyproject.toml`).
+The first release has no `git bump`: `pyproject.toml` already declares 0.1.0, so `git release` tags it as it stands.
 
-The workflow runs a gate (the tag equals the version, which carries no dev marker; the tagged commit is reachable from `main`; the version is greater than the previous tag), then a `docker` job that builds and pushes the image for amd64 and arm64 with the `X.Y.Z`, `X.Y` and `latest` tags, then a `changelog` job that writes the new section of `CHANGELOG.md` (an LLM-written Highlights paragraph and [`git-cliff`](https://git-cliff.org/)'s categorized list), commits it to `main`, and creates the GitHub Release. There is no PyPI publish.
+The release's last step is `git back-merge`, which builds a pull request from `develop` that also opens the next development cycle in the same branch (`X.Y.(Z+1).dev0` in `pyproject.toml`), and merges it once `develop`'s required checks, the version guard's back-merge mode among them, have passed. See the handbook's [`releases.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/releases.md#the-releases-last-step-the-back-merge-pull-request).
+
+The workflow runs a gate (the tag equals the version, which carries no dev marker; the tagged commit is reachable from `main`; the version is greater than the previous tag), then a `docker` job that builds and pushes the image for amd64 and arm64 with the `X.Y.Z`, `X.Y` and `latest` tags, then a `changelog` job that writes the new section of [`CHANGELOG.md`](CHANGELOG.md) (an LLM-written Highlights paragraph and dev-tools' [`generate-changelog`](https://github.com/ParkviewLab/dev-tools)'s categorized list of merged pull requests), commits it to `main`, and creates the GitHub Release. There is no PyPI publish.
 
 ### Dev builds
 
-A dev build is cut only when one is asked for, for instance to try a deployment on the development server before a release. It is dispatched on `develop`:
+A dev build is cut only when one is asked for, for instance to try a deployment on the development server before a release. It is dispatched on `develop`, with `git dev-release <kind>` or:
 
 ```sh
 gh workflow run dev-release.yml --repo ParkviewLab/hazel-tracking --ref develop -f kind=patch   # or minor, or major
 ```
 
-The `Dev release` workflow computes the dev version in its own workspace and commits nothing: the newest `v*` tag raised by `kind`, with the run's number as N (`X.Y.Z.devN`), or, while there is no `v*` tag, the version `pyproject.toml` declares without its dev marker (`0.1.0.devN`). It pushes the image tagged `dev`, with that version and with `sha-<commit>`, never `latest`. dev-tools' `git dev-release` is not used, since its v1.1.0 commits the dev version to `develop`. [`docs/decisions.md`](docs/decisions.md) records why the workflow differs from the handbook's dev parts.
+The `Dev release` workflow computes the dev version in its own workspace and commits nothing: the newest `v*` tag raised by `kind`, or, while there is no `v*` tag, the version `pyproject.toml` declares without any dev marker, followed by `.devN`, where N is the run's number times 100 plus its attempt. It pushes the image tagged `dev`, with that version and with `sha-<commit>`, never `latest`.
 
 ### Commit message convention
 
-PRs are squash-merged with the PR title as the commit subject, so the PR title carries the [Conventional Commit](https://www.conventionalcommits.org/) prefix that [`cliff.toml`](cliff.toml) reads: `feat:`, `fix:` and `perf:` are user-visible sections, `refactor:`, `docs:` and `test:` have their own, and `chore:`, `ci:`, `build:` and `style:` are dropped from the changelog but stay in history; merge commits are dropped as well, and a `Revert` commit goes to a Reverts section. See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
+Because a PR is merged with a merge commit titled `<PR title> (#N)`, the PR title carries the [Conventional Commit](https://www.conventionalcommits.org/) prefix that the changelog generator reads; see the handbook's [`commits-and-changelogs.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/commits-and-changelogs.md#conventional-commit-prefixes) for the groups a title's type is sorted into and what an unrecognised or missing type gets. See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
 
 ## License
 

@@ -13,6 +13,11 @@ one source's interface.
 Every fact is carried with its own state, `Gathered` or `NotGathered`, so that a
 call that fails greys only the facts it feeds (R7). A fact that does not apply
 to a repository, given its trunks (R1), is `None` rather than a `Fact`.
+
+Two gathers feed the page: the full gather, a `Snapshot`, which the overview and
+the detail tabs show (the overview derived from it by `overview.py`, with no
+gather of its own); and the gather of the open pull requests alone, a
+`PullRequestsSnapshot`, which the pull-requests tab shows.
 """
 
 from __future__ import annotations
@@ -95,20 +100,19 @@ class TrunkChecks:
 class DevRelease:
     """The newest dev release, where it is newer than the final release (R3).
 
-    `version` is the dev version as published (`0.1.1.dev3`); `expired` says that
-    its downloadable files have expired, which only installers kept as a dev
-    build's artefacts do.
+    `version` is the dev version as published on GHCR (`0.1.1.dev301`); dev
+    releases are read from GHCR alone (R9).
     """
 
     version: str
-    expired: bool
 
 
 @dataclass(frozen=True)
 class Unreleased:
     """Unreleased work (R5): the merged pull requests among the commits the integration
-    trunk has and the release trunk lacks, and whether any of them changes the
-    documentation (the files under `docs/` and `site/`). The count is also how far the
+    trunk has and the release trunk lacks, leaving out those from `back-merge-`
+    branches, and whether any of them changes the documentation (the files under
+    `docs/` and `site/`). The count is also how far the
     integration trunk is ahead of the release trunk, so the page shows the two as one line.
     """
 
@@ -130,13 +134,22 @@ class Readiness:
 
 
 @dataclass(frozen=True)
+class PullRequestRef:
+    """A pull request by its number and its address on GitHub."""
+
+    number: int
+    url: str
+
+
+@dataclass(frozen=True)
 class WorkingBranch:
     """A branch other than the trunks (R1): how far it is behind the default branch, in
-    commits the default branch has and it lacks, and whether a pull request is open from it."""
+    commits the default branch has and it lacks, and the pull request open from it,
+    `None` where there is none."""
 
     name: str
     behind: Fact[int]
-    pull_request_open: Fact[bool]
+    pull_request: Fact[PullRequestRef | None]
 
 
 @dataclass(frozen=True)
@@ -144,6 +157,8 @@ class PullRequest:
     """An open pull request (R4)."""
 
     number: int
+    title: str
+    url: str
     status: Fact[PullRequestStatus]
 
 
@@ -200,14 +215,26 @@ class Problem:
 
 
 @dataclass(frozen=True)
+class RateLimit:
+    """GitHub's budget as the gather's last answer reported it: the points left and
+    when the budget resets (aware)."""
+
+    remaining: int
+    resets_at: datetime
+
+
+@dataclass(frozen=True)
 class Snapshot:
-    """What one gather yields.
+    """What one full gather yields.
 
     `began_at` is aware; `duration_seconds` is how long the gather took; `completed`
     says whether it completed within the wait (D7). `sources` names the sources the
-    gather asked, in the page's words. `repositories` holds every repository whose
-    name arrived, which is none if the list of repositories did not (R11), and
-    `problems` everything that could not be gathered.
+    gather asked, in the page's words. `repositories` holds every non-archived
+    repository whose name arrived, which is none if the list of repositories did
+    not (R11); `archived` is how many archived repositories were left out, `None`
+    where the list did not arrive. `problems` holds everything that could not be
+    gathered; a gather is wholly successful when it completed and `problems` is
+    empty. `rate_limit` is `None` where no answer reported it.
     """
 
     began_at: datetime
@@ -215,9 +242,39 @@ class Snapshot:
     completed: bool
     sources: tuple[str, ...]
     repositories: tuple[Repository, ...]
+    archived: int | None
     problems: tuple[Problem, ...]
+    rate_limit: RateLimit | None
+
+
+@dataclass(frozen=True)
+class OpenPullRequest:
+    """An open pull request on the pull-requests tab: its repository (`owner/name`) and the
+    pull request itself (R4)."""
+
+    repository: str
+    pull_request: PullRequest
+
+
+@dataclass(frozen=True)
+class PullRequestsSnapshot:
+    """What one gather of the open pull requests alone yields, for the pull-requests tab.
+
+    `pull_requests` holds every open pull request into a repository's integration
+    trunk except those from `back-merge-` branches, Dependabot's included, in the
+    order of their repositories and numbers; it is `NOT_GATHERED` where the search
+    did not answer. The other fields read as `Snapshot`'s do.
+    """
+
+    began_at: datetime
+    duration_seconds: float
+    completed: bool
+    pull_requests: Fact[tuple[OpenPullRequest, ...]]
+    problems: tuple[Problem, ...]
+    rate_limit: RateLimit | None
 
 
 # What the page awaits for each snapshot: `install()` binds the gathering and its
-# client to it, and a test of the page passes a stub.
+# client to each, and a test of the page passes stubs.
 type Gather = Callable[[], Awaitable[Snapshot]]
+type GatherPullRequests = Callable[[], Awaitable[PullRequestsSnapshot]]

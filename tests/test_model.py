@@ -19,10 +19,14 @@ from hazel_tracking.model import (
     DevRelease,
     Gathered,
     NotGathered,
+    OpenPullRequest,
     Problem,
     ProblemDetail,
     PullRequest,
+    PullRequestRef,
+    PullRequestsSnapshot,
     PullRequestStatus,
+    RateLimit,
     Readiness,
     ReleaseCondition,
     Repository,
@@ -34,6 +38,7 @@ from hazel_tracking.model import (
 )
 
 BEGAN = datetime(2026, 9, 18, 21, 3, 12, tzinfo=UTC)
+URL = "https://github.com/ParkviewLab/hazel-tracking"
 
 
 def develop_repository() -> Repository:
@@ -45,7 +50,7 @@ def develop_repository() -> Repository:
         open_issues=Gathered(2),
         newest_tag=Gathered("v0.1.0"),
         newest_release=Gathered(None),
-        dev_release=Gathered(DevRelease(version="0.1.1.dev7", expired=False)),
+        dev_release=Gathered(DevRelease(version="0.1.1.dev701")),
         unreleased=Unreleased(pull_requests=Gathered(3), documentation=NOT_GATHERED),
         readiness=Gathered(
             Readiness(failing=frozenset({ReleaseCondition.CHECKS_FAILING}), documentation=True)
@@ -57,16 +62,23 @@ def develop_repository() -> Repository:
         ),
         working_branches=Gathered(
             (
-                WorkingBranch(name="feature-page", behind=Gathered(0), pull_request_open=Gathered(True)),
                 WorkingBranch(
-                    name="dependabot/uv/httpx", behind=NOT_GATHERED, pull_request_open=Gathered(False)
+                    name="feature-page",
+                    behind=Gathered(0),
+                    pull_request=Gathered(PullRequestRef(number=2, url=f"{URL}/pull/2")),
                 ),
+                WorkingBranch(name="dependabot/uv/httpx", behind=NOT_GATHERED, pull_request=Gathered(None)),
             )
         ),
         pull_requests=Gathered(
             (
-                PullRequest(number=2, status=Gathered(PullRequestStatus.CHECKS_RUNNING)),
-                PullRequest(number=3, status=NOT_GATHERED),
+                PullRequest(
+                    number=2,
+                    title="feat: the page",
+                    url=f"{URL}/pull/2",
+                    status=Gathered(PullRequestStatus.CHECKS_RUNNING),
+                ),
+                PullRequest(number=3, title="docs: the record", url=f"{URL}/pull/3", status=NOT_GATHERED),
             )
         ),
     )
@@ -125,7 +137,9 @@ def test_a_snapshot_holds_each_shape_of_repository_and_its_problems() -> None:
         completed=True,
         sources=("GitHub",),
         repositories=(develop_repository(), staging_repository(), single_trunk_repository()),
+        archived=2,
         problems=(problem,),
+        rate_limit=RateLimit(remaining=4927, resets_at=BEGAN),
     )
     assert [r.trunks.release for r in snapshot.repositories] == ["main", "live", None]
     assert snapshot.problems[0].details[0].status == 403
@@ -142,9 +156,11 @@ def test_a_gather_not_complete_before_the_list_arrived_holds_no_repository() -> 
         completed=False,
         sources=("GitHub",),
         repositories=(),
+        archived=None,
         problems=(
             Problem(what="everything", why="GitHub did not answer within the wait.", details=outstanding),
         ),
+        rate_limit=None,
     )
     assert not snapshot.completed
     assert snapshot.repositories == ()
@@ -221,3 +237,33 @@ def test_no_field_of_the_model_holds_a_header_or_a_credential() -> None:
                     name,
                     f.name,
                 )
+
+
+def test_the_pull_requests_snapshot_holds_each_open_pull_request_with_its_repository() -> None:
+    [first, _] = develop_repository().pull_requests.value  # type: ignore[union-attr]
+    snapshot = PullRequestsSnapshot(
+        began_at=BEGAN,
+        duration_seconds=0.6,
+        completed=True,
+        pull_requests=Gathered(
+            (OpenPullRequest(repository="ParkviewLab/hazel-tracking", pull_request=first),)
+        ),
+        problems=(),
+        rate_limit=RateLimit(remaining=4999, resets_at=BEGAN),
+    )
+    assert isinstance(snapshot.pull_requests, Gathered)
+    assert snapshot.pull_requests.value[0].pull_request.url == f"{URL}/pull/2"
+
+
+def test_a_pull_requests_snapshot_whose_search_did_not_answer_holds_none() -> None:
+    snapshot = PullRequestsSnapshot(
+        began_at=BEGAN,
+        duration_seconds=15.0,
+        completed=False,
+        pull_requests=NOT_GATHERED,
+        problems=(
+            Problem(what="the open pull requests", why="GitHub did not answer within the wait.", details=()),
+        ),
+        rate_limit=None,
+    )
+    assert snapshot.pull_requests == NOT_GATHERED

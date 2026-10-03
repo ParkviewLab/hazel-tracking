@@ -13,12 +13,12 @@ This repo follows the ParkviewLab conventions. The essentials:
 ## Branch & PR flow
 
 - Branch off `develop` into an ephemeral worktree named with a prefix: `feature-`, `bug-`/`fix-`, `doc-`, `test-`, `ops-`, `ci-`, `build-`, `release-` (hyphen, not slash). See the handbook's [`branching.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/branching.md).
-- Open a PR into `develop`. The repo is squash-only, so the merge button can only squash; merging is the maintainer's action.
-- Releases are cut from `main` from the command line (`git merge --no-ff develop`, then bump and tag), not through a PR. See the README's Releasing section and the handbook's [`releases.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/releases.md).
+- Open a PR into `develop`. The repo is merge-commit only, so the merge button can only make a merge commit; merging is the maintainer's action.
+- Releases are cut from `main` from the command line (`git merge --no-ff develop`, then bump and tag), not through a PR, and end with the back-merge pull request from `back-merge-<tag>`, which `git back-merge` opens, checks and merges. See the README's Releasing section and the handbook's [`releases.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/releases.md).
 
 ## Commit / PR-title convention (this is what the changelog reads)
 
-Because PRs are squash-merged, the PR title becomes the commit subject, and the changelog is generated from it (via [git-cliff](https://git-cliff.org/) and [`cliff.toml`](../cliff.toml)). Prefix every PR title with a [Conventional Commit](https://www.conventionalcommits.org/) type:
+Because a PR is merged with a merge commit titled `<PR title> (#N)`, the PR title becomes the commit subject, and the changelog is generated from it (by dev-tools' shared `generate-changelog`, which lists every merged PR by its title, under the section its type names). Prefix every PR title with a [Conventional Commit](https://www.conventionalcommits.org/) type:
 
 | Prefix | CHANGELOG section | Notes |
 |---|---|---|
@@ -28,9 +28,10 @@ Because PRs are squash-merged, the PR title becomes the commit subject, and the 
 | `refactor:` | Refactor | |
 | `docs:` | Docs | |
 | `test:` | Tests | |
-| `chore:` / `ci:` / `build:` / `style:` | _(dropped)_ | stays in git history, not surfaced |
+| `revert:` | Reverts | |
+| `chore:` / `ci:` / `build:` / `style:` | Maintenance | |
 
-A PR title without a recognised prefix is silently dropped from the changelog, so prefix it.
+A `!` after the type (`feat!:`), or a `BREAKING CHANGE:` footer in the PR's description, lists the PR under Breaking changes instead. A PR title without a recognised prefix is listed whole under Other changes, which says nothing about what kind of change it is. So: prefix it. A commit that reaches a release without a PR is listed under Direct commits.
 
 ## Local checks before opening a PR
 

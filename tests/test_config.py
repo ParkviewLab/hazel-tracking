@@ -17,9 +17,11 @@ import pytest
 import hazel_tracking
 from hazel_tracking.config import (
     GATHER_INTERVAL_SECONDS,
-    RETRY_INTERVAL_SECONDS,
+    RETRY_DELAYS_SECONDS,
     TOKEN_VARIABLE,
     VERSION,
+    WATCH_INTERVAL_SECONDS,
+    WATCH_LIMIT_SECONDS,
     Config,
     load_config,
 )
@@ -54,8 +56,9 @@ def test_the_defaults(environment: pytest.MonkeyPatch) -> None:
     assert cfg.github_api_url == "https://api.github.com"
     assert cfg.wait_seconds == 15
     assert cfg.time_zone == ZoneInfo("UTC")
-    assert cfg.gather_interval_seconds == 600
-    assert cfg.retry_interval_seconds == 60
+    assert cfg.gather_interval_seconds == 1800
+    assert cfg.retry_delays_seconds == (60, 120, 240, 480, 960)
+    assert (cfg.watch_interval_seconds, cfg.watch_limit_seconds) == (10, 600)
 
 
 def test_every_variable_is_read(environment: pytest.MonkeyPatch) -> None:
@@ -82,14 +85,20 @@ def test_an_empty_value_counts_as_unset(environment: pytest.MonkeyPatch) -> None
     assert load_config() == Config()
 
 
-def test_the_interval_and_the_retry_are_ruled_not_read(environment: pytest.MonkeyPatch) -> None:
+def test_the_interval_the_retries_and_the_watch_are_ruled_not_read(environment: pytest.MonkeyPatch) -> None:
     environment.setenv("HAZEL_TRACKING_GATHER_INTERVAL_SECONDS", "5")
-    environment.setenv("HAZEL_TRACKING_RETRY_INTERVAL_SECONDS", "5")
+    environment.setenv("HAZEL_TRACKING_WATCH_INTERVAL_SECONDS", "5")
     cfg = load_config()
-    assert (cfg.gather_interval_seconds, cfg.retry_interval_seconds) == (
-        GATHER_INTERVAL_SECONDS,
-        RETRY_INTERVAL_SECONDS,
-    )
+    assert (
+        cfg.gather_interval_seconds,
+        cfg.retry_delays_seconds,
+        cfg.watch_interval_seconds,
+        cfg.watch_limit_seconds,
+    ) == (GATHER_INTERVAL_SECONDS, RETRY_DELAYS_SECONDS, WATCH_INTERVAL_SECONDS, WATCH_LIMIT_SECONDS)
+
+
+def test_the_retry_delays_double_from_one_minute_to_sixteen() -> None:
+    assert tuple(60.0 * 2**n for n in range(5)) == RETRY_DELAYS_SECONDS
 
 
 @pytest.mark.parametrize(("name", "value"), [("PORT", "http"), ("PORT", "0"), ("PORT", "70000")])
@@ -116,9 +125,17 @@ def test_a_time_zone_that_is_not_an_iana_zone_is_refused(environment: pytest.Mon
 
 
 def test_shortened_intervals_are_accepted_and_nonpositive_ones_refused() -> None:
-    assert Config(gather_interval_seconds=0.5, retry_interval_seconds=0.1).retry_interval_seconds == 0.1
-    with pytest.raises(ValueError, match="interval"):
-        Config(retry_interval_seconds=0)
+    assert Config(gather_interval_seconds=0.5, retry_delays_seconds=(0.1, 0.2)).retry_delays_seconds == (
+        0.1,
+        0.2,
+    )
+    for bad in (
+        {"retry_delays_seconds": (0.1, 0.0)},
+        {"watch_interval_seconds": 0.0},
+        {"watch_limit_seconds": -1.0},
+    ):
+        with pytest.raises(ValueError, match="interval"):
+            Config(**bad)
 
 
 def test_the_token_is_not_in_the_configuration_s_repr(sentinel_token: str) -> None:
