@@ -201,5 +201,9 @@ Decided: each repository's name and each pull request's number link to it on Git
 
 Decided: opening the page and the chrome's Refresh run both gathers, the full gather and the gather of the open pull requests; switching tabs gathers nothing. The 30-minute cycle and its retries apply to the full gather alone, and the pull-requests tab's own Refresh and Watch leave that cycle alone. The spinner covers the page while it is opened, while Refresh runs and while the tab's own Refresh runs, and not during the Watch's gathers, whose button shows that it is watching. Reason: the pull-requests tab must hold its data before it is first shown, and a spinner every 10 seconds would cover the page for up to 10 minutes. Set aside: the pull-requests tab gathering when first selected.
 
+## 2026-10-03: what waits on the reader, on the overview
+
+Decided: on the overview, what waits on the reader is a release ready to cut, a pending back-merge, checks failing on either trunk, open pull requests that are ready to merge, in conflict, failing their checks or behind their base, and open issues. A repository with none of these is shown quietly, with its release state and its readiness; a fact not gathered counts as waiting. Reason: cutting a release needs the reader's ask and an incomplete back-merge needs attention, as the requirements of 2026-09-18 list them. Set aside: readiness shown apart from what waits.
+
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>

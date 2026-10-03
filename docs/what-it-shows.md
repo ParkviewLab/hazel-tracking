@@ -36,9 +36,9 @@ One screen, a repository each, distilled from the detail's gather. For each repo
 
 - the release state: the newest final version (the higher of the newest tag and the newest Release, R3), and the dev release where it is newer;
 - readiness, as the detail's Release column reads it: ready to cut, with the count of unreleased pull requests and the documentation note; or each condition that fails; or, for the two website repositories, a pending back-merge;
-- what waits on the reader: the trunks whose checks fail; the open pull requests counted by each status that calls for the reader (ready to merge, conflicts, checks failing, behind its base); and the number of open issues.
+- what waits on the reader: a release ready to cut; a pending back-merge; the trunks whose checks fail; the open pull requests counted by each status that calls for the reader (ready to merge, conflicts, checks failing, behind its base); and the number of open issues.
 
-A repository with nothing waiting on the reader is shown quietly, with its release state alone, so that the eye goes to those that need something. A fact that could not be gathered counts as waiting: what is unknown is shown, not hidden. Everything else (the last push, the branches and their lag, the tag and the Release told apart, the individual pull requests) is on the detail tab.
+A repository with nothing waiting on the reader is shown quietly, with its release state and its readiness, so that the eye goes to those that need something. A fact that could not be gathered counts as waiting: what is unknown is shown, not hidden. Everything else (the last push, the branches and their lag, the tag and the Release told apart, the individual pull requests) is on the detail tab.
 
 ## The detail
 
