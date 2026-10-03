@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+# hazel-tracking: the example stack. One service and no volume, since the service
+# stores nothing.
+#
+#   hazel-tracking  ghcr.io/parkviewlab/hazel-tracking  the ParkviewLab Engineering Dashboard  port 35850
+#
+# Settings come from ${...} variables, so this file works unchanged from a
+# `.env` beside it (copy .env.example) or from Portainer's stack environment.
+# The token has no default: compose refuses to start until it is set.
+#
+# Up:       docker compose up -d
+# Upgrade:  docker compose pull && docker compose up -d
+# Down:     docker compose down
+
+services:
+  hazel-tracking:
+    image: ghcr.io/parkviewlab/hazel-tracking:latest
+    container_name: hazel-tracking
+    restart: unless-stopped
+    ports:
+      - "35850:35850"
+    environment:
+      # CHANGE-ME: a classic GitHub token with read:packages alone (docs/decisions.md, D10).
+      GITHUB_TOKEN_HAZEL_TRACKING: "${GITHUB_TOKEN_HAZEL_TRACKING:?CHANGE-ME: set GITHUB_TOKEN_HAZEL_TRACKING in .env or the stack environment}"
+      # How long a gather waits for GitHub, in seconds (docs/what-it-shows.md, "The wait").
+      HAZEL_TRACKING_WAIT_SECONDS: "${HAZEL_TRACKING_WAIT_SECONDS:-15}"
+      # The IANA time zone in which the page shows times, such as America/Los_Angeles.
+      TZ: "${TZ:-UTC}"
+    extra_hosts:
+      # Lets a consumer on the docker host reach the stack as host.docker.internal on Linux
+      # (it works out of the box on Mac and Windows).
+      - "host.docker.internal:host-gateway"
