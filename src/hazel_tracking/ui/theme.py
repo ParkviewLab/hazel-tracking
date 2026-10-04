@@ -86,21 +86,23 @@ def logo_svg(height_px: int = 44) -> str:
     )
 
 
-# The chrome's label: the display name and the running version, both in Michroma, the version on
-# the name's baseline, as paper-boxing sets its own. The text reads "<name> v<version>", with a
-# real space between the two, so that the element's text content is one line a test can read.
-NAME_PX = 16
-VERSION_PX = 12
-BRAND_LABEL_STYLE = "display:flex; align-items:baseline; gap:.5em"
+# The chrome's display name and running version, both in Michroma at one size, centred together
+# between the logo and the data's age, the version in the muted colour, as prima-dev-dashboard
+# sets its title (the owner's ruling of 2026-10-03).
+NAME_PX = 18
+VERSION_PX = 18
 _BRAND_PART = "font-family:'Michroma',sans-serif; font-size:{size}px; letter-spacing:.03em"
 
 
-def brand_label_html(name: str, version: str) -> str:
-    """The chrome's label, the display name at `NAME_PX` and the version at `VERSION_PX`."""
-    return (
-        f'<span style="{_BRAND_PART.format(size=NAME_PX)}">{html.escape(name)}</span> '
-        f'<span style="{_BRAND_PART.format(size=VERSION_PX)}">v{html.escape(version)}</span>'
-    )
+def brand_name_html(name: str) -> str:
+    """The chrome's display name, at `NAME_PX`."""
+    return f'<span style="{_BRAND_PART.format(size=NAME_PX)}">{html.escape(name)}</span>'
+
+
+def brand_version_html(version: str) -> str:
+    """The chrome's running version, at `VERSION_PX`, read "v<version>"."""
+    style = _BRAND_PART.format(size=VERSION_PX) + f"; color:{MUTED}"
+    return f'<span style="{style}">v{html.escape(version)}</span>'
 
 
 _STYLESHEET = """
