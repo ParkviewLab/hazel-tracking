@@ -68,8 +68,9 @@ def logo_svg(height_px: int = 70) -> str:
     """The horizontal mark, white artwork for the chrome's dark ground, at `height_px` tall.
 
     The file composes the logo inside a 680 by 440 box with wide margins; the artwork
-    spans about x 55..570 and y 100..285, so cropping the viewBox to that leaves the
-    drawing untouched and lets it fill the chrome's height. The file `@import`s its
+    spans x 66..544 and y 124..269 (measured in a browser on 2026-10-03), so cropping
+    the viewBox to that leaves the drawing untouched and lets it fill `height_px`, as
+    prima-dev-dashboard's mark fills its 70 px. The file `@import`s its
     wordmark face from Google Fonts; that line is replaced with the embedded face, so
     the page fetches nothing.
     """
@@ -77,7 +78,7 @@ def logo_svg(height_px: int = 70) -> str:
     if _GOOGLE_IMPORT not in svg:
         raise RuntimeError("the vendored mark no longer carries the font import this code replaces")
     svg = svg.replace(_GOOGLE_IMPORT, _michroma_face(), 1)
-    box = (55, 100, 515, 185)
+    box = (66, 124, 478, 145)
     width_px = round(height_px * box[2] / box[3])
     return svg.replace(
         'width="680" height="440" viewBox="0 0 680 440"',

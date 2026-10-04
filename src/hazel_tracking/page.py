@@ -158,7 +158,7 @@ class Dashboard:
             ui.timer(0, self._opened, once=True)
 
     def _chrome(self) -> None:
-        with ui.row().classes("chrome w-full items-center no-wrap gap-4").style("padding:28px 24px 16px"):
+        with ui.row().classes("chrome w-full items-center no-wrap gap-4").style("padding:18px 24px 16px"):
             ui.html(theme.logo_svg(), sanitize=False).classes("shrink-0").mark("brand-logo")
             # The name and the version, centred together between the logo and the data's age.
             ui.space()
