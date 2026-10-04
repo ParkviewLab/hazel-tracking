@@ -14,7 +14,7 @@ The page has one reader and serves three needs, one tab each: an overview that s
 
 ## Scope
 
-Every repository of the ParkviewLab organisation that is not archived appears, whether or not anything is happening in it. Archived repositories do not appear; the status bar gives their count.
+Every repository of the ParkviewLab organisation that is not archived appears, whether or not anything is happening in it. Archived repositories do not appear; where there are any, the status bar gives their count.
 
 The page shows only what GitHub supplies. The lab's services, its development machines, BookStack and `garycoding/Development-Lab` are outside this version; the later phases that would add them are a proposal ([`in-flight_ideas.md`](in-flight_ideas.md)).
 
@@ -120,7 +120,7 @@ A gather not complete within the wait shows the facts that did arrive, those who
 
 Data that could not be gathered is shown zeroed and greyed out. Zeroed means 0 for a count, "no" for a yes-or-no fact and an empty value for a version or a state, each in grey. A fact gathered and found empty, such as no release or no branch, reads "none" in ordinary type. (R7)
 
-The status bar states the health of the last gather in one sentence, such as "Gathered from GitHub at 14:03:12 in 3.1 s", with GitHub's rate limit remaining and when it resets, the number of archived repositories not shown, and when the GitHub token expires, as GitHub's answers report it ("the GitHub token expires in 350 days"), in yellow within 30 days of its expiry. The rate limit is GraphQL's own budget, the points the gather's calls are spent from, not the budget of the REST calls that read the container packages. (R17) When something went wrong, the sentence says what and why, and an information icon beside it opens a dialog with the detail of each problem. The sentence covers the problems of both gathers, the full gather's and the open pull requests' own, and the dialog holds the detail of every one, so that one gather's trouble is neither hidden by the other's going well nor shown by the icon alone. While there are at most two problems, the sentence names each, what was lost and why; beyond two, it counts them ("3 facts could not be gathered"), and the dialog lists every one. (R21)
+The status bar states the health of the last gather in one sentence, such as "Gathered from GitHub at 14:03:12 in 3.1 s", with GitHub's rate limit remaining and when it resets, the number of archived repositories not shown where there are any, and when the GitHub token expires, as GitHub's answers report it ("the GitHub token expires in 350 days"), in yellow within 30 days of its expiry. The rate limit is GraphQL's own budget, the points the gather's calls are spent from, not the budget of the REST calls that read the container packages. (R17) When something went wrong, the sentence says what and why, and an information icon beside it opens a dialog with the detail of each problem. The sentence covers the problems of both gathers, the full gather's and the open pull requests' own, and the dialog holds the detail of every one, so that one gather's trouble is neither hidden by the other's going well nor shown by the icon alone. While there are at most two problems, the sentence names each, what was lost and why; beyond two, it counts them ("3 facts could not be gathered"), and the dialog lists every one. (R21)
 
 ## Colour and shape
 
