@@ -16,7 +16,7 @@ The deployment assumes the development network, plain HTTP and no login, the mod
 
 The image's command is `uv run --no-sync python -m hazel_tracking`, one process, with `HOST=0.0.0.0` and `PORT=35850` set, and it listens on 35850 inside the container as outside it. Its health check requests `/health` on that port every 15 s after a start period of 15 s; during the start period, Docker Engine 25 and later probe every 5 s, so that a new container is healthy after about six seconds (measured on 2026-10-03 locally and on the development server). An older engine probes at the 15 s interval from the start. The service stores nothing, so the image declares no volume and the stack mounts none.
 
-To build it from a checkout, for instance before the first release exists:
+To build it from a checkout, for instance to try a commit that no published image carries:
 
 ```bash
 docker build -t ghcr.io/parkviewlab/hazel-tracking:latest .
