@@ -231,5 +231,9 @@ Decided, as built, with the readings R21 and R22 of [`what-it-shows.md`](what-it
 
 Decided, as built, as the reading R23 of [`what-it-shows.md`](what-it-shows.md): pressing a pull request's own Watch while a watch of the whole set runs cancels that watch and starts a watch of that pull request; pressing the same pull request's Watch again cancels it. Reason: it mirrors R22 for the tab's Watch. Set aside: none recorded.
 
+## 2026-10-03: the chrome set as prima-dev-dashboard's
+
+Decided: the chrome's title, the display name and the version, both in Michroma at one size, the version in the muted colour, centred together between the logo and the data's age; and the chrome on the page's own ground rather than the brand's deep teal. This amends the chrome entry of 2026-10-03 and R10's mention of the deep teal. Reason: the header as prima-dev-dashboard sets it, which the owner tuned and uses daily. Set aside: the name beside the logo with the version beside it, on deep teal.
+
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>

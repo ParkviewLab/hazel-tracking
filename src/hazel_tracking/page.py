@@ -158,16 +158,21 @@ class Dashboard:
             ui.timer(0, self._opened, once=True)
 
     def _chrome(self) -> None:
-        with ui.row().classes("chrome w-full items-center no-wrap gap-4").style("padding:6px 14px"):
+        with ui.row().classes("chrome w-full items-center no-wrap gap-4").style("padding:28px 24px 16px"):
             ui.html(theme.logo_svg(), sanitize=False).classes("shrink-0").mark("brand-logo")
-            ui.html(theme.brand_label_html(DISPLAY_NAME, VERSION), sanitize=False).classes(
-                "shrink-0 text-white"
-            ).mark("chrome-name")
+            # The name and the version, centred together between the logo and the data's age.
+            ui.space()
+            with ui.row().classes("shrink-0 items-baseline no-wrap").style("gap:.6em"):
+                ui.html(theme.brand_name_html(DISPLAY_NAME), sanitize=False).style(
+                    f"color:{theme.TEXT}"
+                ).mark("chrome-name")
+                ui.html(theme.brand_version_html(VERSION), sanitize=False).mark("chrome-version")
             ui.space()
             self._age = ui.label(GATHERING).classes("sub shrink-0").mark("chrome-age")
             self._refresh = (
                 ui.button(REFRESH, on_click=self._refreshed)
-                .props("dense no-caps outline color=white")
+                .props("dense unelevated")
+                .style(f"background:{theme.REFRESH_COLOUR} !important; color:#fff")
                 .mark("refresh")
             )
 

@@ -27,10 +27,12 @@ from tests.page_fixtures import Plan, content_of, dashboard_of, open_page, until
 
 async def test_the_chrome_names_the_service_and_its_version(user: User, page_plan: Plan) -> None:
     await open_page(user, page_plan)
-    label = content_of(user, "chrome-name")
-    assert DISPLAY_NAME in label
-    assert f"v{VERSION}" in label
-    assert "Michroma" in label
+    name = content_of(user, "chrome-name")
+    version = content_of(user, "chrome-version")
+    assert DISPLAY_NAME in name
+    assert f"v{VERSION}" in version
+    assert f"v{VERSION}" not in name
+    assert "Michroma" in name and "Michroma" in version
 
 
 async def test_the_face_and_the_mark_are_embedded_and_never_fetched(user: User, page_plan: Plan) -> None:
