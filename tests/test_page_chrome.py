@@ -87,10 +87,10 @@ async def test_refresh_runs_both_gathers_again(user: User, page_plan: Plan) -> N
 
 async def test_the_three_tabs_are_there_and_switching_gathers_nothing(user: User, page_plan: Plan) -> None:
     await open_page(user, page_plan)
-    for name in ("Overview", "Detail", "Pull requests"):
+    for name in ("Overview", "Detail", "Pull Requests"):
         await user.should_see(name)
     user.find("Detail").click()
-    user.find("Pull requests").click()
+    user.find("Pull Requests").click()
     user.find("Overview").click()
     await asyncio.sleep(0.1)
     assert page_plan.full_gathers == 1
