@@ -6,7 +6,7 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 
 # hazel-tracking: what the page shows
 
-This is the specification of the page hazel-tracking serves, and the repository's authority for what it shows: an unintended disagreement between it and the code is a defect in the code, and a change to what the page shows amends this document in the same pull request. The rulings behind it, with their dates and reasons, are in [`decisions.md`](decisions.md), and the intent it serves is in [`northstar.md`](northstar.md). The readings R1 to R11 settle what the rulings leave open; each is labelled where it applies.
+This is the specification of the page hazel-tracking serves, and the repository's authority for what it shows: an unintended disagreement between it and the code is a defect in the code, and a change to what the page shows amends this document in the same pull request. The rulings behind it, with their dates and reasons, are in [`decisions.md`](decisions.md), and the intent it serves is in [`northstar.md`](northstar.md). The readings R1 to R11, and R14 to R20 added on 2026-10-03 when the page was built, settle what the rulings leave open; each is labelled where it applies. R12 and R13, the readings of the dev builds, are in the Phase 1 plan and are recorded in [`decisions.md`](decisions.md).
 
 ## Purpose and reader
 
@@ -24,11 +24,11 @@ GitHub is read with a classic token that holds `read:packages` alone (D10). Ever
 
 One page, at `/`. The chrome across the top carries the ParkviewLab logo, the display name "ParkviewLab Engineering Dashboard" with the service's version, the age of the data, and the Refresh button. Below it are three tabs, Overview, Detail and Pull requests, and a status bar runs across the bottom. There are two gathers: the full gather, which the overview and the detail show, and the gather of the open pull requests alone, which the pull-requests tab shows. Opening the page and the Refresh button in the chrome run both; switching tabs gathers nothing.
 
-While the page is opened, while Refresh runs and while the pull-requests tab's own Refresh runs, a large busy spinner is overlaid on the page; the Watch's gathers show none, its button saying instead that it is watching. The page is drawn first, with its chrome and the spinner, and filled in place when the gathers return.
+Every gather shows a spinner over a scrim, a translucent dimming of what lies beneath it, which is not the grey that marks data not gathered. A full gather, whatever started it, the automatic gather and its retries included, shows a large spinner over the whole page. A gather of the open pull requests alone, the tab's own Refresh and each of the Watch's gathers, shows a spinner filling the pull-requests tab's frame alone, that frame dimmed beneath it, so that the chrome and the tabs stay usable and the reader can leave for another view; leaving the tab still stops a running watch. While it watches, the Watch button says so. The page is drawn first, with its chrome and the spinner, and filled in place when the gathers return.
 
 ## Trunks and working branches
 
-A repository's trunks come from its default branch: `develop` gives `main` and `develop`, `staging` gives `live` and `staging`, and `main` gives `main` alone, with no comparison and no readiness. In each pair the first is the release trunk and the second the integration trunk. Every other branch is a working branch, whoever made it: bots' branches count, and so do branches with nothing on them that the default branch lacks. Wherever this document says "behind `develop`", it means behind the default branch. (R1)
+A repository's trunks come from its default branch: `develop` gives `main` and `develop`, `staging` gives `live` and `staging`, and `main` gives `main` alone, with no comparison and no readiness. In each pair the first is the release trunk and the second the integration trunk. Every other branch is a working branch, whoever made it: bots' branches count, and so do branches with nothing on them that the default branch lacks. Wherever this document says "behind `develop`", it means behind the default branch. A repository whose default branch the gather could not read has no trunk to name, and its trunk reads "none" rather than an empty name. (R1, with R18)
 
 ## The overview
 
@@ -38,7 +38,7 @@ One screen, a repository each, distilled from the detail's gather. For each repo
 - readiness, as the detail's Release column reads it: ready to cut, with the count of unreleased pull requests and the documentation note; or each condition that fails; or, for the two website repositories, a pending back-merge;
 - what waits on the reader: a release ready to cut; a pending back-merge; the trunks whose checks fail; the open pull requests counted by each status that calls for the reader (ready to merge, conflicts, checks failing, behind its base); and the number of open issues.
 
-A repository with nothing waiting on the reader is shown quietly, with its release state and its readiness, so that the eye goes to those that need something. A fact that could not be gathered counts as waiting: what is unknown is shown, not hidden. Everything else (the last push, the branches and their lag, the tag and the Release told apart, the individual pull requests) is on the detail tab.
+A repository with nothing waiting on the reader is shown quietly, with its release state and its readiness, so that the eye goes to those that need something. A fact that could not be gathered counts as waiting: what is unknown is shown, not hidden. A release ready to cut and a pending back-merge are the readiness indicator's own words, so each is shown once, in readiness, and the line's not being quiet is what marks the repository as waiting. (R19) Everything else (the last push, the branches and their lag, the tag and the Release told apart, the individual pull requests) is on the detail tab.
 
 ## The detail
 
@@ -64,7 +64,7 @@ The latest final release, shown both ways: the newest version tag and the newest
 
 The latest dev release, shown only when it is newer than the latest final release; otherwise none is shown. It is compared with the higher of the newest tag and the newest Release, and a repository with several packages takes the highest dev version among them. (R3)
 
-A dev release is an image on GHCR tagged `dev`, whose dev version is the tag beside `dev`. Work in a dev build still counts as unreleased until a final release carries it. Dev releases published only as installers kept with a dev workflow's run, or only to TestPyPI or npm, are not read in this version. (R9, as amended on 2026-10-03)
+A dev release is an image on GHCR tagged `dev`, whose dev version is the tag beside `dev`. Work in a dev build still counts as unreleased until a final release carries it. The dev release is read against the final release, so where the final release could not be gathered the dev release is not gathered either, and both are greyed. (R16) Dev releases published only as installers kept with a dev workflow's run, or only to TestPyPI or npm, are not read in this version. (R9, as amended on 2026-10-03)
 
 ### Unreleased
 
@@ -78,11 +78,15 @@ A repository whose default branch is its only trunk has no comparison, and this 
 
 For a repository whose trunks are `main` and `develop`, the single indicator "ready to cut a release". It reads ready when three conditions hold: at least one merged pull request is unreleased as the Unreleased column counts it (documentation-only work counts, and the indicator notes when documentation is included); the checks on `develop` pass, judged on its latest commit that ran checks; and the previous release's back-merge is complete, so that `main` holds nothing `develop` lacks. The latest commit that ran checks is the newest commit on `develop` whose checks have finished; a commit whose checks are still running is passed over (R2). When a condition fails, the indicator names it: nothing to release, checks failing on `develop`, or the back-merge pending; when several fail, it names every one (R6).
 
+Readiness fails on the checks only where the newest commit whose checks have finished failed them: checks still running are passed over, as R2 reads the trunk's own state, so a repository whose checks are running can still read ready to cut. (R14)
+
 The indicator does not appear for the two website repositories, parkviewlab.ai and zoestum.ai, which deploy from `staging` to `live` and have no release tags. For them this column shows a pending back-merge instead: `live` holding commits `staging` lacks (R6). A repository whose default branch is its only trunk shows neither.
 
 ### Checks
 
 Whether the checks on each trunk pass, the release trunk first: passing, failing, running or none, judged on the trunk's newest commit that has any checks, finished or running; a head commit made with `[skip ci]`, such as a release's changelog commit on `main`, is passed over. (R2)
+
+A trunk's history is read ten commits deep, so a trunk whose last ten commits all lack checks reads none. (R15)
 
 ### Branches
 
@@ -98,7 +102,7 @@ The status is the first that applies of: draft, conflicts, checks failing, check
 
 Every open pull request into a repository's integration trunk across the organisation, Dependabot's included, except those from `back-merge-` branches, on one list: each with its repository, its number and title linked to it, and its status as R4 reads it. The tab carries the time of its own gather.
 
-The tab is gathered when the page is opened and when the chrome's Refresh is pressed, and it has two buttons of its own. Its Refresh gathers the open pull requests alone, by one search, which costs GitHub one point. Watch gathers them every 10 seconds and stops when the set of open pull requests changes (a pull request, by repository and number, appears or disappears), after 10 minutes, when the reader leaves the tab, or when the page is closed; moving to another browser tab or another application does not stop it. While it watches, the button says so, and pressing it again cancels the watch. A watch may instead be started from one pull request's row, to wait for that pull request: it then also stops when that pull request's status changes (for example from checks running to ready to merge), at the same cost of one point a gather. When the watch stops on a change, the browser tab's title marks it (for example "1 new pull request", or "#12 ready to merge") and the tab shows the pull request that arrived, left or changed.
+The tab is gathered when the page is opened and when the chrome's Refresh is pressed, and it has two buttons of its own. Its Refresh gathers the open pull requests alone, by one search, which costs GitHub one point. Watch gathers them every 10 seconds and stops when the set of open pull requests changes (a pull request, by repository and number, appears or disappears), after 10 minutes, when the reader leaves the tab, or when the page is closed; moving to another browser tab or another application does not stop it. While it watches, the button says so, and pressing it again cancels the watch; the tab's own Refresh does not stop it, since a watch stops only by the rules given here, and it goes on comparing against the set it was started on. (R20) A watch may instead be started from one pull request's row, to wait for that pull request: it then also stops when that pull request's status changes (for example from checks running to ready to merge), at the same cost of one point a gather. When the watch stops on a change, the browser tab's title marks it (for example "1 new pull request", or "#12 ready to merge") and the tab shows the pull request that arrived, left or changed.
 
 ## When the page gathers
 
@@ -116,7 +120,7 @@ A gather not complete within the wait shows the facts that did arrive, those who
 
 Data that could not be gathered is shown zeroed and greyed out. Zeroed means 0 for a count, "no" for a yes-or-no fact and an empty value for a version or a state, each in grey. A fact gathered and found empty, such as no release or no branch, reads "none" in ordinary type. (R7)
 
-The status bar states the health of the last gather in one sentence, such as "Gathered from GitHub at 14:03:12 in 3.1 s", with GitHub's rate limit remaining and when it resets, the number of archived repositories not shown, and when the GitHub token expires, as GitHub's answers report it ("the GitHub token expires in 350 days"), in yellow within 30 days of its expiry. When something went wrong, the sentence says what and why, and an information icon beside it opens a dialog with the detail of each problem.
+The status bar states the health of the last gather in one sentence, such as "Gathered from GitHub at 14:03:12 in 3.1 s", with GitHub's rate limit remaining and when it resets, the number of archived repositories not shown, and when the GitHub token expires, as GitHub's answers report it ("the GitHub token expires in 350 days"), in yellow within 30 days of its expiry. The rate limit is GraphQL's own budget, the points the gather's calls are spent from, not the budget of the REST calls that read the container packages. (R17) When something went wrong, the sentence says what and why, and an information icon beside it opens a dialog with the detail of each problem. The sentence names the problems of both gathers, the full gather's and the open pull requests' own, and the dialog holds the detail of every one, so that one gather's trouble is neither hidden by the other's going well nor shown by the icon alone.
 
 ## Colour and shape
 
@@ -125,7 +129,7 @@ Three colours carry state, from the brand: sage for passing and ready, yellow fo
 ## Constraints
 
 - The page fits the width of a browser window 1470 CSS pixels wide, the Mac's built-in display at its current scaling, with no type smaller than 12 CSS pixels. The overview fits one screen, 1470 by 800 CSS pixels (that display less the menu bar and a browser's toolbar); the detail and the pull requests grow in height only as their contents grow, and scroll within their tabs. (D8, as amended on 2026-10-03)
-- The interactive elements are the Refresh button, the three tabs, the pull-requests tab's Refresh and Watch, the information icon in the status bar, and the links to GitHub.
+- The interactive elements are the Refresh button, the three tabs, the pull-requests tab's Refresh and Watch, the Watch on each pull request's row in that tab, the information icon in the status bar and the Close of the dialog it opens, and the links to GitHub.
 - It stores and manages no data of its own, and it never writes to GitHub.
 - Nothing on the page, the status bar and its dialog included, ever shows a token, a password or any other secret value; a credential may be named in general terms, such as "the GitHub token was refused".
 - Any device on the development network can open it, with no login, and nothing outside the network can reach it, like the lab's other services.

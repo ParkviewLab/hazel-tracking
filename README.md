@@ -10,7 +10,7 @@ The ParkviewLab Engineering Dashboard: one page, served on the development netwo
 
 ## Status
 
-Unreleased; `develop` declares 0.1.0, the first release. This version is the scaffold: the package, the contract between the gathering and the page ([`src/hazel_tracking/model.py`](src/hazel_tracking/model.py)) with the overview derived from it ([`src/hazel_tracking/overview.py`](src/hazel_tracking/overview.py)), the image, the stack and the workflows. Its page at `/` shows the display name alone and gathers nothing.
+Unreleased; `develop` declares 0.1.0, the first release. The page at `/` is built: the chrome, the three tabs, the overview derived from the full gather ([`src/hazel_tracking/overview.py`](src/hazel_tracking/overview.py)), the detail's ten columns, the open pull requests with their own Refresh and Watch, the status bar and its dialog, the automatic gather and its retries, on the contract between the gathering and the page ([`src/hazel_tracking/model.py`](src/hazel_tracking/model.py)). The gathering from GitHub arrives in its own pull request; until it does, the page shows what a gather it is given yields, and the scenarios in `tests/page_scenarios.py` are what it is read with.
 
 What the page shows is specified in [`docs/what-it-shows.md`](docs/what-it-shows.md), the repository's authority for it. The record of decisions is [`docs/decisions.md`](docs/decisions.md), and the intent [`docs/northstar.md`](docs/northstar.md).
 
