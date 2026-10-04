@@ -4,7 +4,7 @@
 
 [project]
 name = "hazel-tracking"
-version = "0.1.0"
+version = "0.1.1.dev0"
 description = "The ParkviewLab Engineering Dashboard: one page showing the present state of every ParkviewLab repository, gathered from GitHub each time it is opened or refreshed."
 readme = "README.md"
 requires-python = ">=3.13"
