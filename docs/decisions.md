@@ -241,7 +241,7 @@ Decided: a full gather is wholly successful when it completed within the wait an
 
 ## 2026-10-03: one look for the buttons, and their names
 
-Decided: the buttons have the look of the pull-requests tab's buttons (outlined, the accent colour, mixed case, one size, the Watch on a pull request's row alone smaller, to fit its row); the chrome's Refresh reads "Refresh All" and the pull-requests tab's own Refresh reads "Refresh PRs"; the third tab is "Pull Requests". This amends the chrome entry under which the chrome's Refresh took prima-dev-dashboard's blue. Reason: the buttons were inconsistent; and where PR is used for pull request, both words are capitalised. Set aside: the chrome's Refresh in prima-dev-dashboard's blue and capitals.
+Decided: the buttons have the look of the pull-requests tab's buttons (outlined, the accent colour, mixed case, one size, the Watch on a pull request's row alone smaller, to fit its row); the chrome's Refresh reads "Refresh All" and the pull-requests tab's own Refresh reads "Refresh PRs"; the third tab is "Pull Requests". The spinners are NiceGUI's box spinner, half as large again as before (9em over the page, 6em in the pull-requests tab's frame). This amends the chrome entry under which the chrome's Refresh took prima-dev-dashboard's blue. Reason: the buttons were inconsistent; and where PR is used for pull request, both words are capitalised. Set aside: the chrome's Refresh in prima-dev-dashboard's blue and capitals.
 
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>

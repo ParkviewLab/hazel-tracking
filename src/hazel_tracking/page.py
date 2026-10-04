@@ -215,7 +215,7 @@ class Dashboard:
         )
         self._tab_spinner.mark("tab-spinner")
         with self._tab_spinner:
-            ui.spinner(size="4em", color=theme.TEAL)
+            ui.spinner("box", size="6em", color=theme.TEAL)
         self._tab_spinner.set_visibility(False)
         self._list = pull_requests_view.PullRequestsList(container, self._watch_row)
 
@@ -240,7 +240,7 @@ class Dashboard:
         self._spinner = ui.element("div").classes("busy fixed inset-0 z-50 flex items-center justify-center")
         self._spinner.mark("spinner")
         with self._spinner:
-            ui.spinner(size="6em", color=theme.TEAL)
+            ui.spinner("box", size="9em", color=theme.TEAL)
         # The page is drawn with the spinner already over it, since the gathers its opening runs
         # begin as soon as the browser has connected and it is covered until they return.
 
