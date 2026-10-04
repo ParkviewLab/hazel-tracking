@@ -227,5 +227,9 @@ Decided: the trunk comparison of each repository and the lag of each working bra
 
 Decided, as built, with the readings R21 and R22 of [`what-it-shows.md`](what-it-shows.md): the status sentence names the problems of both gathers while there are at most two, and counts them beyond that ("3 facts could not be gathered"), the dialog listing every problem (R21); and while a watch on one pull request runs, the tab's Watch reads "Watching", and pressing it cancels that watch and starts a fresh watch of the whole set, compared with the list the tab then holds, with its own ten minutes (R22). Reason: not recorded beyond the ruling that the page as built stands. Set aside: none recorded.
 
+## 2026-10-03: the chrome set as prima-dev-dashboard's
+
+Decided: the chrome's title, the display name and the version, both in Michroma at one size, the version in the muted colour, centred together between the logo and the data's age; and the chrome on the page's own ground rather than the brand's deep teal. This amends the chrome entry of 2026-10-03 and R10's mention of the deep teal. Reason: the header as prima-dev-dashboard sets it, which the owner tuned and uses daily. Set aside: the name beside the logo with the version beside it, on deep teal.
+
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>

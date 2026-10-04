@@ -15,8 +15,8 @@ two files keep their own licences, outside the repository's dual licence, and
 The palette carries the rule of docs/what-it-shows.md, "Colour and shape": three
 colours carry state, sage for passing and ready, yellow for running and pending
 and red for failing and conflicts, each state also carrying its own word or
-shape; grey carries only data not gathered, and the chrome's deep teal carries
-none. Secondary text is the teal-tinted `--muted`, never the grey, so that grey
+shape; grey carries only data not gathered. The chrome sits on the page's own
+ground, as prima-dev-dashboard's does. Secondary text is the teal-tinted `--muted`, never the grey, so that grey
 on the page means one thing.
 """
 
@@ -64,8 +64,8 @@ def _michroma_face() -> str:
     )
 
 
-def logo_svg(height_px: int = 44) -> str:
-    """The horizontal mark, white artwork for the chrome's deep teal, at `height_px` tall.
+def logo_svg(height_px: int = 70) -> str:
+    """The horizontal mark, white artwork for the chrome's dark ground, at `height_px` tall.
 
     The file composes the logo inside a 680 by 440 box with wide margins; the artwork
     spans about x 55..570 and y 100..285, so cropping the viewBox to that leaves the
@@ -91,7 +91,11 @@ def logo_svg(height_px: int = 44) -> str:
 # sets its title (the owner's ruling of 2026-10-03).
 NAME_PX = 18
 VERSION_PX = 18
-_BRAND_PART = "font-family:'Michroma',sans-serif; font-size:{size}px; letter-spacing:.03em"
+_BRAND_PART = "font-family:'Michroma',sans-serif; font-size:{size}px; font-weight:400; letter-spacing:.06em"
+# The chrome's Refresh, prima-dev-dashboard's button colour; it is chrome and carries no state.
+REFRESH_COLOUR = "#5898d4"
+# The version's colour, prima-dev-dashboard's dimmed title.
+VERSION_COLOUR = "#6d838a"
 
 
 def brand_name_html(name: str) -> str:
@@ -101,7 +105,7 @@ def brand_name_html(name: str) -> str:
 
 def brand_version_html(version: str) -> str:
     """The chrome's running version, at `VERSION_PX`, read "v<version>"."""
-    style = _BRAND_PART.format(size=VERSION_PX) + f"; color:{MUTED}"
+    style = _BRAND_PART.format(size=VERSION_PX) + f"; color:{VERSION_COLOUR}"
     return f'<span style="{style}">v{html.escape(version)}</span>'
 
 
@@ -171,7 +175,7 @@ table.sheet.prlist .prcol-watch {{ width:110px; text-align:right; }}
 
 .wrap {{ white-space:normal; }}
 .tabbar {{ border-bottom:1px solid var(--line); }}
-.chrome {{ background:var(--teal-deep); }}
+.chrome {{ background:var(--bg); }}
 
 /* Every gather shows a spinner over a scrim: a translucent dimming of what lies beneath, which
    is not the grey that marks data not gathered. The scrim of the pull-requests tab's frame takes

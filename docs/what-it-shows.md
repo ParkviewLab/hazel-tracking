@@ -124,7 +124,7 @@ The status bar states the health of the last gather in one sentence, such as "Ga
 
 ## Colour and shape
 
-Three colours carry state, from the brand: sage for passing and ready, yellow for running and pending, and red for failing and conflicts. Each state also carries its own word or shape, so that every state reads without colour. Grey, for data not gathered, and the chrome's deep teal, the brand's frame, carry no state and are not among the three. (R10)
+Three colours carry state, from the brand: sage for passing and ready, yellow for running and pending, and red for failing and conflicts. Each state also carries its own word or shape, so that every state reads without colour. Grey, for data not gathered, carries no state and is not among the three; the chrome sits on the page's own ground. (R10, as amended on 2026-10-03)
 
 ## Constraints
 
