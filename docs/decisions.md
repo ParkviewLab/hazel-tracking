@@ -239,5 +239,9 @@ Decided: the chrome's title, the display name and the version, both in Michroma 
 
 Decided: a full gather is wholly successful when it completed within the wait and no problem was reported, which includes a status GitHub has still not computed after R4's second read though no call failed; this amends the entry on the 30-minute cycle and its retries, under which a gather that completed with no call failed counted as wholly successful. The count of archived repositories appears in the status bar only where there are any. And the ParkviewLab mark is prima-dev-dashboard's own file, its canvas cropped to the artwork, so it renders at prima-dev-dashboard's size, with the chrome's top padding 18 px. Reason: the reader must know whenever something could not be gathered, and the retries start for it; the mark as the reference sets it. Set aside: none recorded.
 
+## 2026-10-03: one look for the buttons, and their names
+
+Decided: the buttons have the look of the pull-requests tab's buttons (outlined, the accent colour, mixed case, one size, the Watch on a pull request's row alone smaller, to fit its row); the chrome's Refresh reads "Refresh All" and the pull-requests tab's own Refresh reads "Refresh PRs"; the third tab is "Pull Requests". This amends the chrome entry under which the chrome's Refresh took prima-dev-dashboard's blue. Reason: the buttons were inconsistent; and where PR is used for pull request, both words are capitalised. Set aside: the chrome's Refresh in prima-dev-dashboard's blue and capitals.
+
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>

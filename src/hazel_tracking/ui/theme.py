@@ -91,8 +91,6 @@ def logo_svg(height_px: int = 70) -> str:
 NAME_PX = 18
 VERSION_PX = 18
 _BRAND_PART = "font-family:'Michroma',sans-serif; font-size:{size}px; font-weight:400; letter-spacing:.06em"
-# The chrome's Refresh, prima-dev-dashboard's button colour; it is chrome and carries no state.
-REFRESH_COLOUR = "#5898d4"
 # The version's colour, prima-dev-dashboard's dimmed title.
 VERSION_COLOUR = "#6d838a"
 

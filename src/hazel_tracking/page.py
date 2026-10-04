@@ -63,8 +63,9 @@ PATH = "/"
 
 OVERVIEW = "Overview"
 DETAIL = "Detail"
-PULL_REQUESTS = "Pull requests"
-REFRESH = "Refresh"
+PULL_REQUESTS = "Pull Requests"
+REFRESH_ALL = "Refresh All"
+REFRESH_PULL_REQUESTS = "Refresh PRs"
 
 GATHERING = "gathering…"
 AGE_PREFIX = "gathered"
@@ -170,9 +171,8 @@ class Dashboard:
             ui.space()
             self._age = ui.label(GATHERING).classes("sub shrink-0").mark("chrome-age")
             self._refresh = (
-                ui.button(REFRESH, on_click=self._refreshed)
-                .props("dense unelevated")
-                .style(f"background:{theme.REFRESH_COLOUR} !important; color:#fff")
+                ui.button(REFRESH_ALL, on_click=self._refreshed)
+                .props("dense no-caps outline color=accent")
                 .mark("refresh")
             )
 
@@ -200,7 +200,7 @@ class Dashboard:
                 self._watch_result = ui.html("", sanitize=False).classes("sub").mark("watch-result")
                 ui.space()
                 self._pull_requests_refresh = (
-                    ui.button(REFRESH, on_click=self._refreshed_pull_requests)
+                    ui.button(REFRESH_PULL_REQUESTS, on_click=self._refreshed_pull_requests)
                     .props("dense no-caps outline color=accent")
                     .mark("pull-requests-refresh")
                 )

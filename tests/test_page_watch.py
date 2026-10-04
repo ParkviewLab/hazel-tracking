@@ -32,7 +32,7 @@ HAZEL = (scenarios.full("hazel-tracking"), 2)
 
 async def open_tab(user: User, page_plan: Plan, **loaded: object) -> None:
     await open_page(user, page_plan, **loaded)  # type: ignore[arg-type]
-    user.find("Pull requests").click()
+    user.find("Pull Requests").click()
     await asyncio.sleep(0.05)
 
 
