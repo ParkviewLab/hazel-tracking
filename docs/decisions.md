@@ -8,7 +8,7 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 
 This is the record of hazel-tracking's decisions: dated entries that describe what was decided and why, kept as history. Entries stand in the order of their dates, oldest first, and an entry is not rewritten when a later decision changes it; the later entry records the change. Each entry names the decision, the reason as it was recorded, and the alternatives set aside; where the record gives no reason or names no alternative, the entry says so rather than supplying one.
 
-The entries from the first to the open-issue count record the rulings on the Dashboard's requirements and design that Phase 1 embodies. D1 to D10 record the rulings on the decisions of the Phase 1 plan, with R12 and R13, the plan's readings of the dev builds; the readings R1 to R11 and R14 to R22 are in [`what-it-shows.md`](what-it-shows.md), which specifies the page. The entries of 2026-10-03 record the rulings made when Phase 1 was compared with prima-dev-dashboard, a local build of Phase 1 used daily as the reference for its behaviour and its page, when the repository was brought to handbook v2.1.1, and, in the last entries, when the page and the gathering were built. Where one of them accepted a recommendation, the reason recorded is the recommendation's. Questions still open are in [`in-flight_ideas.md`](in-flight_ideas.md).
+The entries from the first to the open-issue count record the rulings on the Dashboard's requirements and design that Phase 1 embodies. D1 to D10 record the rulings on the decisions of the Phase 1 plan, with R12 and R13, the plan's readings of the dev builds; the readings R1 to R11 and R14 to R23 are in [`what-it-shows.md`](what-it-shows.md), which specifies the page. The entries of 2026-10-03 record the rulings made when Phase 1 was compared with prima-dev-dashboard, a local build of Phase 1 used daily as the reference for its behaviour and its page, when the repository was brought to handbook v2.1.1, and, in the last entries, when the page and the gathering were built. Where one of them accepted a recommendation, the reason recorded is the recommendation's. Questions still open are in [`in-flight_ideas.md`](in-flight_ideas.md).
 
 ## 2026-09-17: a service that stores nothing and gathers on request
 
@@ -226,6 +226,10 @@ Decided: the trunk comparison of each repository and the lag of each working bra
 ## 2026-10-03: the status sentence's count, and the tab's Watch during a watch on one pull request
 
 Decided, as built, with the readings R21 and R22 of [`what-it-shows.md`](what-it-shows.md): the status sentence names the problems of both gathers while there are at most two, and counts them beyond that ("3 facts could not be gathered"), the dialog listing every problem (R21); and while a watch on one pull request runs, the tab's Watch reads "Watching", and pressing it cancels that watch and starts a fresh watch of the whole set, compared with the list the tab then holds, with its own ten minutes (R22). Reason: not recorded beyond the ruling that the page as built stands. Set aside: none recorded.
+
+## 2026-10-03: a pull request's own Watch during a watch of the whole set
+
+Decided, as built, as the reading R23 of [`what-it-shows.md`](what-it-shows.md): pressing a pull request's own Watch while a watch of the whole set runs cancels that watch and starts a watch of that pull request; pressing the same pull request's Watch again cancels it. Reason: it mirrors R22 for the tab's Watch. Set aside: none recorded.
 
 ## 2026-10-03: the chrome set as prima-dev-dashboard's
 
