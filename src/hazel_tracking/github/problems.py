@@ -20,7 +20,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from hazel_tracking.github.calls import Failure, FailureKind
+from hazel_tracking.github.calls import PAGE_LIMIT, Failure, FailureKind
 from hazel_tracking.model import Problem, ProblemDetail
 
 # The calls, as the dialog names them.
@@ -85,15 +85,17 @@ def empty(what: str, call: str) -> Problem:
     )
 
 
-def truncated(what: str, call: str, listed: int, total: int, limit: int) -> Problem:
-    """The problem a comparison GitHub will not list whole makes: its answer carries at most
-    `limit` commits, however many pages are asked for, so a longer comparison cannot be counted."""
+def truncated(what: str, call: str, listed: int, total: int) -> Problem:
+    """The problem a comparison not listed whole makes: GitHub stopped listing its commits before
+    its own total, or the page guard was reached, so the comparison cannot be counted."""
     return Problem(
         what=what,
         why=f"GitHub listed only {listed} of the {total} commits of the comparison",
         details=(
             ProblemDetail(
-                call=call, status=200, message=f"GitHub's comparison lists at most {limit} commits"
+                call=call,
+                status=200,
+                message=f"the comparison's commits were listed 100 a page, to a guard of {PAGE_LIMIT} pages",
             ),
         ),
     )
