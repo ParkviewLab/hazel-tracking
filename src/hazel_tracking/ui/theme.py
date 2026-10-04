@@ -67,22 +67,20 @@ def _michroma_face() -> str:
 def logo_svg(height_px: int = 70) -> str:
     """The horizontal mark, white artwork for the chrome's dark ground, at `height_px` tall.
 
-    The file composes the logo inside a 680 by 440 box with wide margins; the artwork
-    spans x 66..544 and y 124..269 (measured in a browser on 2026-10-03), so cropping
-    the viewBox to that leaves the drawing untouched and lets it fill `height_px`, as
-    prima-dev-dashboard's mark fills its 70 px. The file `@import`s its
-    wordmark face from Google Fonts; that line is replaced with the embedded face, so
-    the page fetches nothing.
+    The file is prima-dev-dashboard's copy of the handbook's mark, its canvas cropped to
+    the artwork (478 by 145), so it fills `height_px` as prima-dev-dashboard's does. It
+    `@import`s its wordmark face from Google Fonts; that line is replaced with the
+    embedded face, so the page fetches nothing.
     """
-    svg = _BRAND.joinpath("parkview_lab_bw_horizontal_white.svg").read_text(encoding="utf-8")
+    svg = _BRAND.joinpath("parkview-lab.svg").read_text(encoding="utf-8")
     if _GOOGLE_IMPORT not in svg:
         raise RuntimeError("the vendored mark no longer carries the font import this code replaces")
     svg = svg.replace(_GOOGLE_IMPORT, _michroma_face(), 1)
-    box = (66, 124, 478, 145)
-    width_px = round(height_px * box[2] / box[3])
+    box_width, box_height = 478.28751, 145.34091
+    width_px = round(height_px * box_width / box_height)
     return svg.replace(
-        'width="680" height="440" viewBox="0 0 680 440"',
-        f'width="{width_px}" height="{height_px}" viewBox="{box[0]} {box[1]} {box[2]} {box[3]}"',
+        f'width="{box_width}"\n   height="{box_height}"',
+        f'width="{width_px}"\n   height="{height_px}"',
         1,
     )
 

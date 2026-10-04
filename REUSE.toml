@@ -13,7 +13,8 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
-# The ParkviewLab mark is vendored from the handbook's brand/logos and keeps its
+# The ParkviewLab mark, vendored from prima-dev-dashboard's copy of the handbook's brand/logos
+# (its canvas cropped to the artwork), keeps its
 # all-rights-reserved tag; it is not covered by the repository's dual licence.
 [[annotations]]
 path = ["src/hazel_tracking/ui/brand/**"]

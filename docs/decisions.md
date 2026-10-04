@@ -237,7 +237,7 @@ Decided: the chrome's title, the display name and the version, both in Michroma 
 
 ## 2026-10-03: a wholly successful gather, and the mark's size
 
-Decided: a full gather is wholly successful when it completed within the wait and no problem was reported, which includes a status GitHub has still not computed after R4's second read though no call failed; this amends the entry on the 30-minute cycle and its retries, under which a gather that completed with no call failed counted as wholly successful. And the ParkviewLab mark renders at prima-dev-dashboard's size, its viewBox cropped to the artwork, with the chrome's top padding 18 px. Reason: the reader must know whenever something could not be gathered, and the retries start for it; the mark as the reference sets it. Set aside: none recorded.
+Decided: a full gather is wholly successful when it completed within the wait and no problem was reported, which includes a status GitHub has still not computed after R4's second read though no call failed; this amends the entry on the 30-minute cycle and its retries, under which a gather that completed with no call failed counted as wholly successful. And the ParkviewLab mark is prima-dev-dashboard's own file, its canvas cropped to the artwork, so it renders at prima-dev-dashboard's size, with the chrome's top padding 18 px. Reason: the reader must know whenever something could not be gathered, and the retries start for it; the mark as the reference sets it. Set aside: none recorded.
 
 ---
 <sub>© 2026 Gary Frattarola · Licensed under [MIT](../LICENSE-MIT) OR [Apache-2.0](../LICENSE-APACHE) · part of [ParkviewLab](https://github.com/ParkviewLab)</sub>
