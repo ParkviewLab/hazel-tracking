@@ -10,13 +10,13 @@ The ParkviewLab Engineering Dashboard: one page, served on the development netwo
 
 ## Status
 
-Phase 1 is built: the page at `/` with its three tabs, gathered from GitHub alone for the repositories of the ParkviewLab organisation. It is unreleased until v0.1.0, the version `develop` declares. The overview shows on one screen each repository's release state, its readiness to cut a release and what waits on the reader; the detail shows every fact for every repository in one table of ten columns; and the pull-requests tab lists every open pull request into the integration trunks, with its own Refresh and a Watch. The page gathers when it is opened and on Refresh, and by itself every 30 minutes while it is open, with retries after a gather that is not wholly successful. The lab's services, its development machines and BookStack are later phases ([`docs/in-flight_ideas.md`](docs/in-flight_ideas.md)).
+Phase 1 is built: the page at `/` with its three tabs, gathered from GitHub alone for the repositories of the ParkviewLab organisation. Its releases are listed on the repository's [releases page](https://github.com/ParkviewLab/hazel-tracking/releases). The overview shows on one screen each repository's release state, its readiness to cut a release and what waits on the reader; the detail shows every fact for every repository in one table of ten columns; and the pull-requests tab lists every open pull request into the integration trunks, with its own Refresh and a Watch. The page gathers when it is opened and on Refresh, and by itself every 30 minutes while it is open, with retries after a gather that is not wholly successful ([`docs/what-it-shows.md`](docs/what-it-shows.md#when-the-page-gathers)). The lab's services, its development machines and BookStack are later phases ([`docs/in-flight_ideas.md`](docs/in-flight_ideas.md)).
 
 What the page shows is specified in [`docs/what-it-shows.md`](docs/what-it-shows.md), the repository's authority for it. How the software is put together, each fact's call to GitHub included, is [`docs/architecture.md`](docs/architecture.md); how it is deployed is [`docs/deployment.md`](docs/deployment.md). The record of decisions is [`docs/decisions.md`](docs/decisions.md), and the intent [`docs/northstar.md`](docs/northstar.md).
 
 ## Run
 
-hazel-tracking runs in Docker, with `docker compose` or as a Portainer stack; there is no PyPI package. The image is `ghcr.io/parkviewlab/hazel-tracking`, for amd64 and arm64, published by each release. Until v0.1.0 is released, build the image from a checkout first, with `docker build -t ghcr.io/parkviewlab/hazel-tracking:latest .`.
+hazel-tracking runs in Docker, with `docker compose` or as a Portainer stack; there is no PyPI package. The image is `ghcr.io/parkviewlab/hazel-tracking`, for amd64 and arm64, published by each release; it may also be built from a checkout, with `docker build -t ghcr.io/parkviewlab/hazel-tracking:latest .`.
 
 ```bash
 cp .env.example .env          # set GITHUB_TOKEN_HAZEL_TRACKING, and TZ to the lab's zone
@@ -25,9 +25,9 @@ docker compose ps             # "health: starting" for about six seconds, then "
 curl http://127.0.0.1:35850/health
 ```
 
-Then open `http://<host>:35850/`, where `<host>` is the Docker host as the development network reaches it. For Portainer, paste [`docker-compose.yml`](docker-compose.yml) into the stack's web editor and enter the same variables as the stack's environment variables. [`docs/deployment.md`](docs/deployment.md) covers both in full, with the token, the wait, a dev build and troubleshooting.
+The six seconds hold on Docker Engine 25 and later, where the health check runs every 5 s during its start period. Then open `http://<host>:35850/`, where `<host>` is the Docker host as the development network reaches it. For Portainer, paste [`docker-compose.yml`](docker-compose.yml) into the stack's web editor and enter the same variables as the stack's environment variables. [`docs/deployment.md`](docs/deployment.md) covers both in full, with the token, the wait, a dev build and troubleshooting.
 
-The token is a classic GitHub token with `read:packages` alone, the only kind GitHub's Packages API accepts: it reads the organisation's public repositories and its container packages, and it can write nothing. The service stores nothing, so the stack has no volume. The status bar shows when the token expires, in yellow within 30 days of its expiry.
+The service reads GitHub with one token; its kind, what it can read and its expiry are in [`docs/deployment.md`](docs/deployment.md#the-token). The service stores nothing, so the stack has no volume.
 
 The deployment assumes the development network, plain HTTP and no login: any device on the network can open the page, and it is not for the public internet. The page never shows the token or any other secret.
 
@@ -47,13 +47,13 @@ Every variable is read from the environment at startup. The image sets `HOST` an
 |---|---|---|
 | `HOST` | `127.0.0.1` (image: `0.0.0.0`) | bind address |
 | `PORT` | `35850` | listen port |
-| `GITHUB_TOKEN_HAZEL_TRACKING` | unset, required | the GitHub token, a classic token with `read:packages` alone; the service refuses to start without it, with exit status 2 |
+| `GITHUB_TOKEN_HAZEL_TRACKING` | unset, required | the GitHub token ([`docs/deployment.md`](docs/deployment.md#the-token)); it has no default, and the service refuses to start without it, with exit status 2 |
 | `HAZEL_TRACKING_GITHUB_ORG` | `ParkviewLab` | the organisation whose repositories the page shows |
 | `HAZEL_TRACKING_GITHUB_API_URL` | `https://api.github.com` | the GitHub API the service reads |
 | `HAZEL_TRACKING_WAIT_SECONDS` | `15` | how long a gather waits for GitHub, in seconds, whole or not ([`docs/what-it-shows.md`](docs/what-it-shows.md#the-wait)) |
 | `TZ` | `UTC` | the IANA time zone in which the page shows times, such as `America/Los_Angeles` |
 
-An unset or empty variable takes its default; a value that cannot be read (a port that is not an integer between 1 and 65535, a wait that is not a number of seconds greater than 0, a zone that is not an IANA time zone) stops the service at start with an error naming the variable. The schedule is ruled, not configured: the automatic gather every 30 minutes, the retries after 1, 2, 4, 8 and 16 minutes, and the watch's gather every 10 seconds for at most 10 minutes are constants in [`src/hazel_tracking/config.py`](src/hazel_tracking/config.py).
+An unset or empty variable takes its default, except the token, which has none: without it the service stops at start with exit status 2. A value that cannot be read (a port that is not an integer between 1 and 65535, a wait that is not a number of seconds greater than 0, a zone that is not an IANA time zone) stops the service at start with an error naming the variable. The schedule is ruled, not configured: the automatic gather every 30 minutes, the retries after 1, 2, 4, 8 and 16 minutes, and the watch's gather every 10 seconds for at most 10 minutes are constants in [`src/hazel_tracking/config.py`](src/hazel_tracking/config.py), as [`docs/what-it-shows.md`](docs/what-it-shows.md) rules them under "When the page gathers" and "The pull requests".
 
 ## Releasing
 
@@ -68,7 +68,7 @@ git release                                       # annotated tag vX.Y.Z from py
 git push --follow-tags                            # the tag push fires the workflow
 ```
 
-The first release has no `git bump`: `pyproject.toml` already declares 0.1.0, so `git release` tags it as it stands.
+A first release has no `git bump`: `pyproject.toml` already declares the first version, where the templates start, so `git release` tags it as it stands.
 
 The release's last step is `git back-merge`, which builds the branch `back-merge-<tag>` from `develop` and `main`, adds to it the commit that opens the next development cycle (`X.Y.(Z+1).dev0` in `pyproject.toml`), opens a pull request from it into `develop`, and merges it once `develop`'s required checks, the version guard's back-merge mode among them, have passed. See the handbook's [`releases.md`](https://github.com/ParkviewLab/handbook/blob/main/docs/releases.md#the-releases-last-step-the-back-merge-pull-request).
 
@@ -76,13 +76,13 @@ The workflow runs a gate (the tag equals the version, which carries no dev marke
 
 ### Dev builds
 
-A dev build is cut only when one is asked for, for instance to try a deployment on the development server before a release. It is dispatched on `develop`, with `git dev-release <kind>` or:
+A dev build is dispatched on `develop`, with `git dev-release <kind>` or:
 
 ```sh
 gh workflow run dev-release.yml --repo ParkviewLab/hazel-tracking --ref develop -f kind=patch   # or minor, or major
 ```
 
-The `Dev release` workflow computes the dev version in its own workspace and commits nothing: the newest `v*` tag raised by `kind`, or, while there is no `v*` tag, the version `pyproject.toml` declares without any dev marker, followed by `.devN`, where N is the run's number times 100 plus its attempt. It pushes the image tagged `dev`, with that version and with `sha-<commit>`, never `latest`.
+When to cut one, its version, its tags and how to try it are in [`docs/deployment.md`](docs/deployment.md#trying-a-dev-build).
 
 ### Commit message convention
 
