@@ -92,7 +92,7 @@ class FakeRepository:
     how many the release trunk has that the integration trunk lacks (a pending back-merge).
     `ahead_missing` are oids the comparison lists and the repository will not resolve, as happens
     where a branch is rewritten between the two calls. `ahead_total` is the number GitHub reports
-    where it will not list them all, the 250 of its comparison: where it is set, the comparison
+    where it will not list them all: where it is set, the comparison
     says it is longer than the commits it gives; `ahead_total_absent` leaves that number out of the
     answer altogether.
     `files` are the paths each merged pull request changed. `missing` names a ref GitHub answers
@@ -503,7 +503,7 @@ class FakeGitHub:
     def _comparison(self, repository: FakeRepository, refs: str, request: httpx.Request) -> FakeAnswer:
         """REST's comparison of `base...head`, as GitHub answers it: the counts both ways and the
         commits of the range, a page at a time. `total_commits` is `ahead_total` where a test gives
-        one, which is how GitHub reports a comparison longer than the 250 commits it will list."""
+        one, which is how GitHub reports a comparison longer than the commits it lists."""
         base, _, head = refs.partition("...")
         if base in repository.missing or head in repository.missing:
             return not_found()

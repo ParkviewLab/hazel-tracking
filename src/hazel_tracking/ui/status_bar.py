@@ -106,7 +106,7 @@ def sentence(
 
 
 def wholly_successful(snapshot: Snapshot) -> bool:
-    """A gather is wholly successful when it completed within the wait and no call failed."""
+    """A gather is wholly successful when it completed within the wait and no problem was reported."""
     return snapshot.completed and not snapshot.problems
 
 

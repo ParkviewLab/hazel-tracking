@@ -411,8 +411,8 @@ async def test_a_list_of_open_pull_requests_cut_short_is_not_gathered(
 async def test_a_comparison_github_will_not_list_whole_greys_the_count_and_keeps_the_back_merge(
     gh_config: Config, gh_organisation: FakeOrganisation
 ) -> None:
-    """GitHub's comparison lists at most 250 commits however many pages are asked for, so a longer
-    comparison cannot be counted; whether the release trunk holds anything the integration trunk
+    """A comparison whose commits GitHub stops listing before its own total cannot be counted;
+    whether the release trunk holds anything the integration trunk
     lacks is answered by the same call and stands."""
     organisation = replace(
         gh_organisation,
@@ -432,7 +432,10 @@ async def test_a_comparison_github_will_not_list_whole_greys_the_count_and_keeps
     assert atlas.readiness == NOT_GATHERED
     problem = gh_problem(snapshot.problems, f"the unreleased work of {ORGANISATION}/atlas")
     assert problem.why == "GitHub listed only 4 of the 300 commits of the comparison"
-    assert problem.details[0].message == "GitHub's comparison lists at most 250 commits"
+    assert (
+        problem.details[0].message
+        == "the comparison's commits were listed 100 a page, to a guard of 20 pages"
+    )
 
 
 async def test_a_comparison_refused_for_want_of_a_scope_says_so(

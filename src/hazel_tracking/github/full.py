@@ -85,10 +85,6 @@ RELEASE_READY_TRUNKS = Trunks(integration="develop", release="main")
 
 _TAGS, _BRANCHES, _PULLS = "tags", "branches", "pulls"
 
-# How many commits of a comparison GitHub will list, however many pages are asked for; a longer
-# comparison is reported rather than counted (docs.github.com, "Compare two commits").
-COMPARISON_COMMIT_LIMIT = 250
-
 
 @dataclass
 class RepositoryState:
@@ -569,9 +565,9 @@ async def _trunk_comparison(
     where the comparison could not be read whole (R5, R6).
 
     Whether the release trunk holds any commit the integration trunk lacks comes from the same
-    answer and stands on its own. The comparison is read page by page for its commits; GitHub
-    answers at most 250 of them whatever is asked for, so where it says the comparison is longer, or
-    does not say how long it is, the count cannot be made.
+    answer and stands on its own. The comparison is read page by page for its commits, 100 a
+    page, to the page guard; where GitHub stops listing before its own total, the guard is reached,
+    or the answer does not say how long the comparison is, the count cannot be made.
     """
     integration = repository.trunks.integration
     call = problems.of_repository(problems.COMPARISON, repository.name)
@@ -611,7 +607,7 @@ async def _trunk_comparison(
         if not page:
             break
     if len(oids) < total:
-        state.problems.append(problems.truncated(what, call, len(oids), total, COMPARISON_COMMIT_LIMIT))
+        state.problems.append(problems.truncated(what, call, len(oids), total))
     return None
 
 
